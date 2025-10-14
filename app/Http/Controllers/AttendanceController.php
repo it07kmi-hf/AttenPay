@@ -136,4 +136,94 @@ class AttendanceController extends Controller
         // fallback
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
+
+    public function preview(Request $req)
+    {
+        $format = strtolower($req->query('format', 'csv')); // csv|xlsx|pdf
+        $branch = (int)($req->query('branch_id', 21089));
+        $from   = $req->query('from', '2025-05-01');
+        $to     = $req->query('to', now('Asia/Jakarta')->toDateString());
+        $q      = trim((string)$req->query('q', ''));
+        $limit  = (int)$req->query('limit', 200);  // batas tampilan awal
+        if ($limit < 1) $limit = 1;
+        if ($limit > 2000) $limit = 2000; // jaga payload Inertia
+
+        $baseQuery = Attendance::query()
+            ->select([
+                'schedule_date','employee_id','full_name','clock_in','clock_out',
+                'real_work_hour','overtime_hours','overtime_first_amount',
+                'overtime_second_amount','overtime_total_amount','id'
+            ])
+            ->where('branch_id', $branch)
+            ->whereBetween('schedule_date', [$from, $to])
+            ->orderBy('schedule_date', 'asc')
+            ->orderBy('employee_id', 'asc');
+
+        if ($q !== '') {
+            $baseQuery->where(function ($w) use ($q) {
+                $w->where('employee_id', 'like', $q.'%')
+                ->orWhere('full_name', 'like', $q.'%');
+            });
+        }
+
+        // Data preview (dibatasi)
+        $rows = (clone $baseQuery)->take($limit)->get();
+
+        // Total baris matching filter (untuk info)
+        $total = (clone $baseQuery)->count('id');
+
+        // Siapkan CSV preview (teks) dari first N rows
+        $csvHeader = [
+            'Date','Employee ID','Name','Clock In','Clock Out',
+            'Work Hour','OT Hours','OT 1 (1.5x)','OT 2 (2x)','OT Total'
+        ];
+        $csvLines = [];
+        $csvLines[] = implode(',', $csvHeader);
+        foreach ($rows as $r) {
+            $line = [
+                $r->schedule_date,
+                $r->employee_id,
+                str_replace(['"', "\n", "\r"], ['""', ' ', ' '], $r->full_name),
+                $r->clock_in ?? '-',
+                $r->clock_out ?? '-',
+                (string)$r->real_work_hour,
+                (int)$r->overtime_hours,
+                (int)$r->overtime_first_amount,
+                (int)$r->overtime_second_amount,
+                (int)$r->overtime_total_amount,
+            ];
+            // CSV simple (tanpa quote field kecuali nama sudah dibersihkan)
+            $csvLines[] = implode(',', $line);
+        }
+        $csvPreview = implode("\n", $csvLines);
+
+        // PDF preview: render HTML blade yang sama (dibatasi rows)
+        $pdfHtml = view('pdf.attendance', [
+            'rows'   => $rows,
+            'from'   => $from,
+            'to'     => $to,
+            'branch' => $branch,
+        ])->render();
+
+        // URL download asli (pakai export existing)
+        $downloadUrl = route('attendance.export', [
+            'format'    => $format,
+            'from'      => $from,
+            'to'        => $to,
+            'branch_id' => $branch,
+            'q'         => $q,
+        ]);
+
+        return Inertia::render('Attendance/ExportPreview', [
+            'format'       => $format,
+            'filters'      => ['branch_id'=>$branch, 'from'=>$from, 'to'=>$to, 'q'=>$q],
+            'total'        => $total,
+            'limit'        => $limit,
+            'rows'         => $rows,       // untuk table preview
+            'csv'          => $csvPreview, // teks CSV
+            'pdf_html'     => $pdfHtml,    // HTML siap render
+            'download_url' => $downloadUrl,
+        ]);
+    }
+
 }
