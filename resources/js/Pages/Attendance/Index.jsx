@@ -125,8 +125,7 @@ Proceed?`
     }
   }
 
-  // ============= NEW: Monthly OT Total per Employee (within loaded page) =============
-  // Build a stable, ordered grouping by employee (keeps first appearance order)
+  // ============= Monthly totals per Employee (with BSOTT) =============
   const groups = useMemo(() => {
     const map = new Map()
     const order = []
@@ -141,12 +140,16 @@ Proceed?`
           firstIndex: idx,
           items: [],
           monthlyOt: 0,
+          monthlyBsott: 0,
         })
         order.push(key)
       }
       const g = map.get(key)
       g.items.push(r)
-      g.monthlyOt += Number(r.overtime_total_amount || 0)
+      const dailyBase = calcDailyTotal(r.real_work_hour)
+      const otTotal = Number(r.overtime_total_amount || 0)
+      g.monthlyOt += otTotal
+      g.monthlyBsott += dailyBase + otTotal
     })
 
     return order.map((k) => map.get(k))
@@ -295,9 +298,9 @@ Proceed?`
           </div>
         </form>
 
-        {/* Table (Desktop) */}
-        <div className="hidden md:block overflow-x-auto bg-white rounded-2xl shadow border border-sky-100">
-          <table className="min-w-[1140px] w-full text-sm">
+        {/* Table (Desktop) — no horizontal scroll */}
+        <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-100">
+          <table className="w-full text-sm">
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">Date</th>
@@ -306,16 +309,17 @@ Proceed?`
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">In</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">Out</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">Work Hours</th>
-                <th className="px-4 py-3 text-left font-semibold text-sky-900">Total</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Base Salary</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">OT Hours</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">OT 1 (1.5×)</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">OT 2 (2×)</th>
                 <th className="px-4 py-3 text-left font-semibold text-sky-900">OT Total</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Total BSOTT</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan="11">No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={12}>No data</td></tr>
               )}
 
               {/* Render grouped by employee */}
@@ -323,6 +327,7 @@ Proceed?`
                 <React.Fragment key={g.key}>
                   {g.items.map((r) => {
                     const dailyTotal = calcDailyTotal(r.real_work_hour)
+                    const bsott = dailyTotal + Number(r.overtime_total_amount || 0)
                     return (
                       <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
                         <td className="px-4 py-2">{r.schedule_date}</td>
@@ -340,16 +345,18 @@ Proceed?`
                         <td className="px-4 py-2">{fmtIDR(r.overtime_first_amount)}</td>
                         <td className="px-4 py-2">{fmtIDR(r.overtime_second_amount)}</td>
                         <td className={`px-4 py-2 font-bold ${r.overtime_total_amount>0?'text-emerald-700':'text-slate-500'}`}>{fmtIDR(r.overtime_total_amount)}</td>
+                        <td className="px-4 py-2 font-extrabold text-slate-800">{fmtIDR(bsott)}</td>
                       </tr>
                     )
                   })}
 
-                  {/* Subtotal row per employee: OT Total (Month) */}
+                  {/* Subtotal row per employee: OT Total & BSOTT (Month) */}
                   <tr key={`${g.key}-subtotal`} className="bg-amber-50/60">
                     <td className="px-4 py-2 text-right text-amber-700 font-semibold" colSpan={10}>
-                      Total Lembur
+                      Grand Total
                     </td>
                     <td className="px-4 py-2 font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</td>
+                    <td className="px-4 py-2 font-extrabold text-amber-700">{fmtIDR(g.monthlyBsott)}</td>
                   </tr>
                 </React.Fragment>
               ))}
@@ -394,12 +401,13 @@ Proceed?`
           </div>
         </div>
 
-        {/* Cards (Mobile) — grouped by employee with a monthly subtotal card */}
+        {/* Cards (Mobile) */}
         <div className="md:hidden space-y-3">
           {groups.map((g) => (
             <div key={g.key} className="space-y-3">
               {g.items.map((r) => {
                 const dailyTotal = calcDailyTotal(r.real_work_hour)
+                const bsott = dailyTotal + Number(r.overtime_total_amount || 0)
                 return (
                   <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-100 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -412,6 +420,10 @@ Proceed?`
                         <div className="text-xs text-slate-500">OT Total</div>
                         <div className={`text-sm font-bold ${r.overtime_total_amount>0?'text-emerald-700':'text-slate-600'}`}>
                           {fmtIDR(r.overtime_total_amount)}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">Total BSOTT</div>
+                        <div className="text-sm font-extrabold text-slate-800">
+                          {fmtIDR(bsott)}
                         </div>
                       </div>
                     </div>
@@ -430,7 +442,7 @@ Proceed?`
                         OT Hours<br /><span className="font-semibold text-blue-700">{r.overtime_hours} h</span>
                       </div>
                       <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">
-                        Daily Total (≤7h)<br />
+                        Base Salary<br />
                         <span className="font-semibold text-amber-700">{fmtIDR(dailyTotal)}</span>
                       </div>
                       <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">
@@ -445,12 +457,18 @@ Proceed?`
               })}
 
               {/* Monthly subtotal card per employee */}
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-amber-700/80">Total Lembur</div>
-                  <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                <div className="grid grid-cols-2 gap-3 items-end">
+                  <div>
+                    <div className="text-xs text-amber-700/80">Grand Total OT</div>
+                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-amber-700/80">Total BSOTT</div>
+                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyBsott)}</div>
+                  </div>
                 </div>
-                <div className="text-right text-xs text-slate-500">
+                <div className="mt-2 text-right text-xs text-slate-500">
                   <div>{from} → {to}</div>
                   {g.employee_id && <div>Emp: {g.employee_id}</div>}
                 </div>

@@ -191,7 +191,7 @@
         <th>Clock In</th>
         <th>Clock Out</th>
         <th class="right">Work Hour</th>
-        <th class="right">Total</th>
+        <th class="right">Base Salary</th>
         <th class="right">OT Hours</th>
         <th class="right">OT 1 (1.5×)</th>
         <th class="right">OT 2 (2×)</th>
@@ -232,7 +232,7 @@
 
     <tfoot>
       <tr>
-        <th colspan="5" class="right">TOTAL</th>
+        <th colspan="5" class="right">Grand Total</th>
         <th class="right">{{ number_format($sumWork, 2, ',', '.') }}</th>
         <th class="right">{{ $fmtRupiah($sumDaily) }}</th>
         <th class="right">{{ number_format($sumOTHours, 0, ',', '.') }}</th>
