@@ -155,7 +155,6 @@ export default function Index({ rows, filters }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
           {/* === LOGO + TITLE === */}
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
-            {/* bulat putih, ukuran pas */}
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
               <img
                 src={LOGO_KMI}
@@ -168,7 +167,6 @@ export default function Index({ rows, filters }) {
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll System</h1>
-              {/* hanya company name di header biru */}
               <p className="text-xs sm:text-sm opacity-90 truncate">
                 <b>PT Kayu Mebel Indonesia (KMI)</b>
               </p>
@@ -177,10 +175,10 @@ export default function Index({ rows, filters }) {
 
           {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
-            <div className="flex overflow-hidden rounded-lg border border-white/20">
+            <div className="flex overflow-hidden rounded-lg border border-white/30">
               <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
-              <button onClick={() => confirmExport('xlsx')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/20">Excel</button>
-              <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/20">PDF</button>
+              <button onClick={() => confirmExport('xlsx')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">Excel</button>
+              <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
             {/* Logout icon (merah) */}
@@ -189,7 +187,7 @@ export default function Index({ rows, filters }) {
               method="post"
               as="button"
               aria-label="Logout"
-              className="p-2 rounded-md border border-white/20 bg-white/10 hover:bg-white/20"
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
               title="Logout"
             >
               <svg
@@ -200,7 +198,6 @@ export default function Index({ rows, filters }) {
                 strokeWidth="1.8"
                 className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors"
               >
-                {/* Heroicons: ArrowRightOnRectangle */}
                 <path strokeLinecap="round" strokeLinejoin="round"
                   d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round"
@@ -211,11 +208,11 @@ export default function Index({ rows, filters }) {
 
           {/* Mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
-            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/20 rounded-md">Filters</button>
+            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
             <div className="relative">
-              <button onClick={() => setMobileExportOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/20 rounded-md">Export</button>
+              <button onClick={() => setMobileExportOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Export</button>
               {mobileExportOpen && (
-                <div className="absolute right-0 mt-2 w-40 rounded-lg overflow-hidden border border-white/30 bg-white/90 text-slate-800 shadow-lg backdrop-blur">
+                <div className="absolute right-0 mt-2 w-40 rounded-lg overflow-hidden border border-white/40 bg-white/90 text-slate-800 shadow-lg backdrop-blur">
                   <button onClick={() => { setMobileExportOpen(false); confirmExport('csv') }} className="block w-full text-left px-3 py-2 hover:bg-slate-100">CSV</button>
                   <button onClick={() => { setMobileExportOpen(false); confirmExport('xlsx') }} className="block w-full text-left px-3 py-2 hover:bg-slate-100 border-t">Excel</button>
                   <button onClick={() => { setMobileExportOpen(false); confirmExport('pdf') }} className="block w-full text-left px-3 py-2 hover:bg-slate-100 border-t">PDF</button>
@@ -229,7 +226,7 @@ export default function Index({ rows, filters }) {
               method="post"
               as="button"
               aria-label="Logout"
-              className="p-2 rounded-md border border-white/20 bg-white/10 hover:bg-white/20"
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
               title="Logout"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
@@ -245,11 +242,11 @@ export default function Index({ rows, filters }) {
         </div>
       </header>
 
-      {/* === Period badge tepat di bawah header biru (lebih kecil) === */}
+      {/* Period badge */}
       <div className="bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
           <div
-            className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white/80 backdrop-blur px-2.5 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow-sm"
+            className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60"
             aria-label="Selected period"
           >
             <span className="font-medium">Period:</span>
@@ -262,26 +259,36 @@ export default function Index({ rows, filters }) {
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-5 space-y-6">
-        {/* Filters (Desktop) — dibuat lebih pendek */}
-        <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-100 p-3 md:p-4">
+        {/* Filters (Desktop) */}
+        <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-200 p-3 md:p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div className="md:col-span-2">
               <label className="text-sm">From</label>
-              <input type="date" className="w-full border rounded-md px-3 py-1.5 text-sm" value={from} onChange={e => setFrom(e.target.value)} />
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                value={from}
+                onChange={e => setFrom(e.target.value)}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm">To</label>
-              <input type="date" className="w-full border rounded-md px-3 py-1.5 text-sm" value={to} onChange={e => setTo(e.target.value)} />
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                value={to}
+                onChange={e => setTo(e.target.value)}
+              />
             </div>
             <div className="md:col-span-1 flex gap-2">
-              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm">Apply</button>
-              <button onClick={resetFilters} className="w-full border rounded-md py-1.5 text-sm">Reset</button>
+              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm border border-sky-700">Apply</button>
+              <button onClick={resetFilters} className="w-full border border-slate-300 rounded-md py-1.5 text-sm hover:bg-slate-50">Reset</button>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-3">
             <input
               placeholder="Search name / ID"
-              className="flex-1 border rounded-md px-3 py-1.5 text-sm"
+              className="flex-1 border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
               value={q}
               onChange={e => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
@@ -290,26 +297,25 @@ export default function Index({ rows, filters }) {
           </div>
         </form>
 
-        {/* Table (Desktop) — full kiri-kanan, sejajar */}
-        <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-100">
+        {/* Table (Desktop) — overflow aman + kolom uang lebih lega */}
+        <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-200 overflow-hidden">
           <table className="w-full text-xs md:text-sm table-fixed">
-            {/* NOTE: kolom Name fleksibel */}
             <colgroup>
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
-              <col />
-              <col className="w-[5rem]" />
-              <col className="w-[5rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[5.5rem]" />
-              <col className="w-[5rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
+              <col className="w-[7rem]" />    {/* Date */}
+              <col className="w-[7rem]" />    {/* Employee ID */}
+              <col />                          {/* Name (flex) */}
+              <col className="w-[5.5rem]" />  {/* In */}
+              <col className="w-[5.5rem]" />  {/* Out */}
+              <col className="w-[6.5rem]" />  {/* Work Hours */}
+              <col className="w-[7.5rem]" />  {/* Basic Salary */}
+              <col className="w-[5.5rem]" />  {/* OT Hours */}
+              <col className="w-[7rem]" />    {/* OT 1 */}
+              <col className="w-[7rem]" />    {/* OT 2 */}
+              <col className="w-[7rem]" />    {/* OT Total */}
+              <col className="w-[8rem]" />    {/* Total Salary */}
             </colgroup>
 
-            <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-gray-200">
+            <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
               <tr>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Date</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Employee ID</th>
@@ -317,12 +323,12 @@ export default function Index({ rows, filters }) {
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Out</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Work Hours</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Basic Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">Basic Salary</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Hours</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 1 (1.5×)</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 2 (2×)</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Total</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Total Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT 1 (1.5×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT 2 (2×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT Total</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">Total Salary</th>
               </tr>
             </thead>
 
@@ -341,8 +347,8 @@ export default function Index({ rows, filters }) {
                       <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.schedule_date}</td>
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">
-                          <div className="truncate">{r.full_name}</div>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="truncate text-center">{r.full_name}</div>
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
@@ -351,14 +357,14 @@ export default function Index({ rows, filters }) {
                             {r.real_work_hour} h
                           </span>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800 text-center">{fmtIDR(base)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800 text-right tabular-nums">{fmtIDR(base)}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-center">
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{r.overtime_hours} h</span>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtIDR(r.overtime_first_amount)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtIDR(r.overtime_second_amount)}</td>
-                        <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-center`}>{fmtIDR(ot)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-extrabold text-slate-800 text-center">{fmtIDR(bsott)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
+                        <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-extrabold text-slate-800 text-right tabular-nums">{fmtIDR(bsott)}</td>
                       </tr>
                     )
                   })}
@@ -368,8 +374,8 @@ export default function Index({ rows, filters }) {
                     <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={10}>
                       Grand Total
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-center">{fmtIDR(g.monthlyOt)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-center">{fmtIDR(g.monthlyBsott)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-right tabular-nums">{fmtIDR(g.monthlyOt)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-right tabular-nums">{fmtIDR(g.monthlyBsott)}</td>
                   </tr>
                 </React.Fragment>
               ))}
@@ -400,7 +406,7 @@ export default function Index({ rows, filters }) {
                 const ot = Number(r.overtime_total_amount || 0)
                 const bsott = base + ot
                 return (
-                  <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-100 p-4">
+                  <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold">{r.schedule_date}</div>
@@ -426,7 +432,7 @@ export default function Index({ rows, filters }) {
                   </div>
                 )
               })}
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
                 <div className="grid grid-cols-2 gap-3 items-end">
                   <div>
                     <div className="text-xs text-amber-700/80">Grand Total OT</div>
