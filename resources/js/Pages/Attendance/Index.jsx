@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
+// pakai path logo yang sama seperti di halaman login
+const LOGO_KMI = '/img/logo-kmi.png'
+
 export default function Index({ rows, filters }) {
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
@@ -38,7 +41,7 @@ export default function Index({ rows, filters }) {
   }
   const fmtIDR = (n) => `Rp ${Number(n || 0).toLocaleString('id-ID')}`
 
-  // Base salary harian (cap 7 jam)
+  // Basic salary harian (cap 7 jam)
   const calcDailyTotal = (realWorkHour) => {
     const h = Math.max(0, parseFloat(realWorkHour ?? 0))
     const billable = Math.min(h, 7)
@@ -149,31 +152,68 @@ export default function Index({ rows, filters }) {
     >
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll</h1>
-            <p className="text-xs sm:text-sm opacity-90 truncate">
-              Period <b>{from}</b> → <b>{to}</b> • Branch <b>PT Kayu Mebel Indonesia (KMI)</b>
-            </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
+          {/* === LOGO + TITLE === */}
+          <div className="min-w-0 flex items-center gap-4 sm:gap-5">
+            {/* bulat putih, ukuran pas */}
+            <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
+              <img
+                src={LOGO_KMI}
+                alt="KMI Logo"
+                className="h-full w-full object-contain"
+                loading="eager"
+                decoding="async"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll System</h1>
+              {/* hanya company name di header biru */}
+              <p className="text-xs sm:text-sm opacity-90 truncate">
+                <b>PT Kayu Mebel Indonesia (KMI)</b>
+              </p>
+            </div>
           </div>
 
           {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="flex overflow-hidden rounded-lg border border-white/20">
-              <button onClick={() => confirmExport('csv')} className="px-3 py-2 bg-white/15 hover:bg-white/25">CSV</button>
-              <button onClick={() => confirmExport('xlsx')} className="px-3 py-2 bg-white/15 hover:bg-white/25 border-l border-white/20">Excel</button>
-              <button onClick={() => confirmExport('pdf')} className="px-3 py-2 bg-white/15 hover:bg-white/25 border-l border-white/20">PDF</button>
+              <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
+              <button onClick={() => confirmExport('xlsx')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/20">Excel</button>
+              <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/20">PDF</button>
             </div>
-            <Link href="/logout" method="post" as="button" className="px-3 py-2 bg-white/15 hover:bg-white/25 border border-white/20 rounded">
-              Logout
+
+            {/* Logout icon (merah) */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              aria-label="Logout"
+              className="p-2 rounded-md border border-white/20 bg-white/10 hover:bg-white/20"
+              title="Logout"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors"
+              >
+                {/* Heroicons: ArrowRightOnRectangle */}
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9l3 3m0 0l-3 3m3-3H3" />
+              </svg>
             </Link>
           </div>
 
           {/* Mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
-            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-3 py-2 bg-white/15 hover:bg-white/25 border border-white/20 rounded text-sm">Filters</button>
+            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/20 rounded-md">Filters</button>
             <div className="relative">
-              <button onClick={() => setMobileExportOpen(v => !v)} className="px-3 py-2 bg-white/15 hover:bg-white/25 border border-white/20 rounded text-sm">Export</button>
+              <button onClick={() => setMobileExportOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/20 rounded-md">Export</button>
               {mobileExportOpen && (
                 <div className="absolute right-0 mt-2 w-40 rounded-lg overflow-hidden border border-white/30 bg-white/90 text-slate-800 shadow-lg backdrop-blur">
                   <button onClick={() => { setMobileExportOpen(false); confirmExport('csv') }} className="block w-full text-left px-3 py-2 hover:bg-slate-100">CSV</button>
@@ -182,57 +222,70 @@ export default function Index({ rows, filters }) {
                 </div>
               )}
             </div>
-            <Link href="/logout" method="post" as="button" className="px-3 py-2 bg-white/15 hover:bg-white/25 border border-white/20 rounded text-sm">Logout</Link>
+
+            {/* Logout icon mobile */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              aria-label="Logout"
+              className="p-2 rounded-md border border-white/20 bg-white/10 hover:bg-white/20"
+              title="Logout"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" strokeWidth="1.8"
+                   className="h-5 w-5 text-red-400 hover:text-red-500">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 9l3 3m0 0l-3 3m3-3H3" />
+              </svg>
+            </Link>
           </div>
         </div>
-
-        {/* Mobile Filters Panel */}
-        {mobileFiltersOpen && (
-          <div className="md:hidden border-t border-white/15 bg-white/10 backdrop-blur pb-4">
-            <div className="max-w-7xl mx-auto px-4 pt-3">
-              <form onSubmit={search} className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="text-xs text-white/90">From</label>
-                  <input type="date" className="w-full border rounded px-3 py-2 bg-white" value={from} onChange={e => setFrom(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-xs text-white/90">To</label>
-                  <input type="date" className="w-full border rounded px-3 py-2 bg-white" value={to} onChange={e => setTo(e.target.value)} />
-                </div>
-                <div className="flex gap-2">
-                  <button type="submit" className="flex-1 bg-white/90 hover:bg-white text-sky-700 font-medium rounded-lg py-2">Apply</button>
-                  <button onClick={resetFilters} className="flex-1 bg-white/15 hover:bg-white/25 border border-white/40 rounded-lg py-2 text-white">Reset</button>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <input placeholder="Search name / ID" className="flex-1 border rounded px-3 py-2 bg-white" value={q} onChange={e => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }} />
-                  <span className="text-xs text-white/90">{isSearching ? 'Searching…' : 'Type to search'}</span>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </header>
 
+      {/* === Period badge tepat di bawah header biru (lebih kecil) === */}
+      <div className="bg-slate-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+          <div
+            className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white/80 backdrop-blur px-2.5 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow-sm"
+            aria-label="Selected period"
+          >
+            <span className="font-medium">Period:</span>
+            <span className="font-semibold">{from}</span>
+            <span>→</span>
+            <span className="font-semibold">{to}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Filters (Desktop) */}
-        <form onSubmit={search} className="hidden md:block bg-white rounded-2xl shadow border border-sky-100 p-4 md:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-5 space-y-6">
+        {/* Filters (Desktop) — dibuat lebih pendek */}
+        <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-100 p-3 md:p-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div className="md:col-span-2">
               <label className="text-sm">From</label>
-              <input type="date" className="w-full border rounded px-3 py-2" value={from} onChange={e => setFrom(e.target.value)} />
+              <input type="date" className="w-full border rounded-md px-3 py-1.5 text-sm" value={from} onChange={e => setFrom(e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm">To</label>
-              <input type="date" className="w-full border rounded px-3 py-2" value={to} onChange={e => setTo(e.target.value)} />
+              <input type="date" className="w-full border rounded-md px-3 py-1.5 text-sm" value={to} onChange={e => setTo(e.target.value)} />
             </div>
             <div className="md:col-span-1 flex gap-2">
-              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-lg py-2">Apply</button>
-              <button onClick={resetFilters} className="w-full border rounded-lg py-2">Reset</button>
+              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm">Apply</button>
+              <button onClick={resetFilters} className="w-full border rounded-md py-1.5 text-sm">Reset</button>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <input placeholder="Search name / ID" className="flex-1 border rounded px-3 py-2" value={q} onChange={e => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }} />
+            <input
+              placeholder="Search name / ID"
+              className="flex-1 border rounded-md px-3 py-1.5 text-sm"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
+            />
             <span className="text-sm text-slate-500">{isSearching ? 'Searching…' : 'Type to search'}</span>
           </div>
         </form>
@@ -240,21 +293,20 @@ export default function Index({ rows, filters }) {
         {/* Table (Desktop) — full kiri-kanan, sejajar */}
         <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-100">
           <table className="w-full text-xs md:text-sm table-fixed">
-            {/* NOTE: Semua kolom dikunci width KECUALI Name → Name ambil sisa lebar,
-                     jadi tabel selalu penuh kanan–kiri dan sejajar dengan filter di atas */}
+            {/* NOTE: kolom Name fleksibel */}
             <colgroup>
-              <col className="w-[6rem]" />   {/* Date */}
-              <col className="w-[6rem]" />   {/* Employee ID */}
-              <col />                         {/* Name (flex, sisa lebar) */}
-              <col className="w-[5rem]" />   {/* In */}
-              <col className="w-[5rem]" />   {/* Out */}
-              <col className="w-[6rem]" />   {/* Work Hours */}
-              <col className="w-[5.5rem]" />   {/* Base Salary */}
-              <col className="w-[5rem]" /> {/* OT Hours */}
-              <col className="w-[6rem]" />   {/* OT 1 */}
-              <col className="w-[6rem]" />   {/* OT 2 */}
-              <col className="w-[6rem]" />   {/* OT Total */}
-              <col className="w-[6rem]" />   {/* Total BSOTT */}
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col />
+              <col className="w-[5rem]" />
+              <col className="w-[5rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[5rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-gray-200">
@@ -265,12 +317,12 @@ export default function Index({ rows, filters }) {
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Out</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Work Hours</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Base Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Basic Salary</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Hours</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 1 (1.5×)</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 2 (2×)</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Total</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Total BSOTT</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Total Salary</th>
               </tr>
             </thead>
 
@@ -289,7 +341,6 @@ export default function Index({ rows, filters }) {
                       <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.schedule_date}</td>
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
-                        {/* Name fleksibel + truncate → tidak nabrak kolom In */}
                         <td className="px-3 py-2 whitespace-nowrap text-center">
                           <div className="truncate">{r.full_name}</div>
                         </td>
@@ -314,7 +365,6 @@ export default function Index({ rows, filters }) {
 
                   {/* Subtotal per employee */}
                   <tr className="bg-amber-50/60">
-                    {/* label nempel ke sisi kanan kolspan → terlihat sejajar */}
                     <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={10}>
                       Grand Total
                     </td>
@@ -332,7 +382,7 @@ export default function Index({ rows, filters }) {
           <div>Total: {total}</div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => goto(Math.max(1, current - 1))} disabled={current === 1} className={`px-3 py-1 rounded border ${current === 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Prev</button>
-            {makePages(current, last).map((p, i) =>
+            {pages.map((p, i) =>
               p === '…' ? <span key={`e-${i}`} className="px-2 text-slate-500 select-none">…</span> : (
                 <button key={p} onClick={() => goto(p)} className={`px-3 py-1 rounded border ${p === current ? 'bg-sky-600 text-white border-sky-600' : 'bg-white hover:bg-slate-50'}`}>{p}</button>
               )
@@ -360,7 +410,7 @@ export default function Index({ rows, filters }) {
                       <div className="text-right shrink-0">
                         <div className="text-xs text-slate-500">OT Total</div>
                         <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
-                        <div className="text-xs text-slate-500 mt-1">Total BSOTT</div>
+                        <div className="text-xs text-slate-500 mt-1">Total Salary</div>
                         <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
                       </div>
                     </div>
@@ -370,7 +420,7 @@ export default function Index({ rows, filters }) {
                       <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
                       <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{r.real_work_hour} h</span></div>
                       <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{r.overtime_hours} h</span></div>
-                      <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Base Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
+                      <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
                       <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(r.overtime_first_amount)} • {fmtIDR(r.overtime_second_amount)}</span></div>
                     </div>
                   </div>
@@ -383,7 +433,7 @@ export default function Index({ rows, filters }) {
                     <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs text-amber-700/80">Total BSOTT</div>
+                    <div className="text-xs text-amber-700/80">Total Salary</div>
                     <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyBsott)}</div>
                   </div>
                 </div>
