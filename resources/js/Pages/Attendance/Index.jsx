@@ -70,7 +70,7 @@ export default function Index({ rows, filters }) {
       to
     )}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
 
-  // ===== Pagination helpers =====
+  // ===== Compact Pagination Helpers =====
   const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
   const last = rows?.last_page ?? rows?.meta?.last_page ?? 1
   const total = rows?.total ?? rows?.meta?.total ?? 0
@@ -125,7 +125,8 @@ Proceed?`
     }
   }
 
-  // ============= Group per employee + monthly totals (OT & BSOTT) =============
+  // ============= NEW: Monthly OT Total per Employee (within loaded page) =============
+  // Build a stable, ordered grouping by employee (keeps first appearance order)
   const groups = useMemo(() => {
     const map = new Map()
     const order = []
@@ -140,16 +141,12 @@ Proceed?`
           firstIndex: idx,
           items: [],
           monthlyOt: 0,
-          monthlyBsott: 0,
         })
         order.push(key)
       }
       const g = map.get(key)
       g.items.push(r)
-      const dailyBase = calcDailyTotal(r.real_work_hour)
-      const otTotal = Number(r.overtime_total_amount || 0)
-      g.monthlyOt += otTotal
-      g.monthlyBsott += dailyBase + otTotal
+      g.monthlyOt += Number(r.overtime_total_amount || 0)
     })
 
     return order.map((k) => map.get(k))
@@ -298,83 +295,61 @@ Proceed?`
           </div>
         </form>
 
-        {/* Table (Desktop) — fixed columns, centered, nowrap, no horizontal scroll */}
-        <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-100">
-          <table className="w-full text-sm table-fixed">
-            {/* Kunci lebar kolom agar header & body sejajar */}
-            <colgroup>
-              <col className="w-[7.5rem]" /> {/* Date */}
-              <col className="w-[8rem]" />    {/* Employee ID */}
-              <col />                         {/* Name (flex sisa) */}
-              <col className="w-[5rem]" />    {/* In */}
-              <col className="w-[5rem]" />    {/* Out */}
-              <col className="w-[6.5rem]" />  {/* Work Hours */}
-              <col className="w-[7.5rem]" />  {/* Base Salary */}
-              <col className="w-[6rem]" />    {/* OT Hours */}
-              <col className="w-[7.5rem]" />  {/* OT 1 */}
-              <col className="w-[7.5rem]" />  {/* OT 2 */}
-              <col className="w-[7.5rem]" />  {/* OT Total */}
-              <col className="w-[8.5rem]" />  {/* Total BSOTT */}
-            </colgroup>
-
+        {/* Table (Desktop) */}
+        <div className="hidden md:block overflow-x-auto bg-white rounded-2xl shadow border border-sky-100">
+          <table className="min-w-[1140px] w-full text-sm">
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Date</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Employee ID</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Name</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">In</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Out</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Work Hours</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Base Salary</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Hours</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 1 (1.5×)</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT 2 (2×)</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Total</th>
-                <th className="px-4 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Total BSOTT</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Date</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Employee ID</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Name</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">In</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Out</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Work Hours</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">Base Salary</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">OT Hours</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">OT 1 (1.5×)</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">OT 2 (2×)</th>
+                <th className="px-4 py-3 text-left font-semibold text-sky-900">OT Total</th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={12}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan="11">No data</td></tr>
               )}
 
+              {/* Render grouped by employee */}
               {groups.map((g) => (
                 <React.Fragment key={g.key}>
                   {g.items.map((r) => {
                     const dailyTotal = calcDailyTotal(r.real_work_hour)
-                    const bsott = dailyTotal + Number(r.overtime_total_amount || 0)
                     return (
                       <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                        <td className="px-4 py-2 whitespace-nowrap font-mono text-center">{r.schedule_date}</td>
-                        <td className="px-4 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">{r.full_name}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">
+                        <td className="px-4 py-2">{r.schedule_date}</td>
+                        <td className="px-4 py-2 font-mono">{r.employee_id}</td>
+                        <td className="px-4 py-2 font-medium truncate max-w-[260px]">{r.full_name}</td>
+                        <td className="px-4 py-2">{fmtTime(r.clock_in)}</td>
+                        <td className="px-4 py-2">{fmtTime(r.clock_out)}</td>
+                        <td className="px-4 py-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${r.real_work_hour >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
                             {r.real_work_hour} h
                           </span>
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap font-semibold text-slate-800 text-center">{fmtIDR(dailyTotal)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{r.overtime_hours} h</span>
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">{fmtIDR(r.overtime_first_amount)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-center">{fmtIDR(r.overtime_second_amount)}</td>
-                        <td className={`px-4 py-2 whitespace-nowrap font-bold ${r.overtime_total_amount>0?'text-emerald-700':'text-slate-500'} text-center`}>{fmtIDR(r.overtime_total_amount)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap font-extrabold text-slate-800 text-center">{fmtIDR(bsott)}</td>
+                        <td className="px-4 py-2 font-semibold text-slate-800">{fmtIDR(dailyTotal)}</td>
+                        <td className="px-4 py-2"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{r.overtime_hours} h</span></td>
+                        <td className="px-4 py-2">{fmtIDR(r.overtime_first_amount)}</td>
+                        <td className="px-4 py-2">{fmtIDR(r.overtime_second_amount)}</td>
+                        <td className={`px-4 py-2 font-bold ${r.overtime_total_amount>0?'text-emerald-700':'text-slate-500'}`}>{fmtIDR(r.overtime_total_amount)}</td>
                       </tr>
                     )
                   })}
 
-                  {/* Subtotal row per employee */}
+                  {/* Subtotal row per employee: OT Total (Month) */}
                   <tr key={`${g.key}-subtotal`} className="bg-amber-50/60">
-                    <td className="px-4 py-2 text-amber-700 font-semibold whitespace-nowrap text-center" colSpan={10}>
+                    <td className="px-4 py-2 text-right text-amber-700 font-semibold" colSpan={10}>
                       Grand Total
                     </td>
-                    <td className="px-4 py-2 whitespace-nowrap font-extrabold text-amber-700 text-center">{fmtIDR(g.monthlyOt)}</td>
-                    <td className="px-4 py-2 whitespace-nowrap font-extrabold text-amber-700 text-center">{fmtIDR(g.monthlyBsott)}</td>
+                    <td className="px-4 py-2 font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</td>
                   </tr>
                 </React.Fragment>
               ))}
@@ -419,13 +394,12 @@ Proceed?`
           </div>
         </div>
 
-        {/* Cards (Mobile) */}
+        {/* Cards (Mobile) — grouped by employee with a monthly subtotal card */}
         <div className="md:hidden space-y-3">
           {groups.map((g) => (
             <div key={g.key} className="space-y-3">
               {g.items.map((r) => {
                 const dailyTotal = calcDailyTotal(r.real_work_hour)
-                const bsott = dailyTotal + Number(r.overtime_total_amount || 0)
                 return (
                   <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-100 p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -438,10 +412,6 @@ Proceed?`
                         <div className="text-xs text-slate-500">OT Total</div>
                         <div className={`text-sm font-bold ${r.overtime_total_amount>0?'text-emerald-700':'text-slate-600'}`}>
                           {fmtIDR(r.overtime_total_amount)}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">Total BSOTT</div>
-                        <div className="text-sm font-extrabold text-slate-800">
-                          {fmtIDR(bsott)}
                         </div>
                       </div>
                     </div>
@@ -475,18 +445,12 @@ Proceed?`
               })}
 
               {/* Monthly subtotal card per employee */}
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-                <div className="grid grid-cols-2 gap-3 items-end">
-                  <div>
-                    <div className="text-xs text-amber-700/80">Grand Total OT</div>
-                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-amber-700/80">Total BSOTT</div>
-                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyBsott)}</div>
-                  </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-amber-700/80">Grand Total</div>
+                  <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
                 </div>
-                <div className="mt-2 text-right text-xs text-slate-500">
+                <div className="text-right text-xs text-slate-500">
                   <div>{from} → {to}</div>
                   {g.employee_id && <div>Emp: {g.employee_id}</div>}
                 </div>
