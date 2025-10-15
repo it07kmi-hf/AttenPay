@@ -301,18 +301,18 @@ export default function Index({ rows, filters }) {
         <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-200 overflow-hidden">
           <table className="w-full text-xs md:text-sm table-fixed">
             <colgroup>
-              <col className="w-[7rem]" />    {/* Date */}
-              <col className="w-[7rem]" />    {/* Employee ID */}
+              <col className="w-[6rem]" />    {/* Date */}
+              <col className="w-[6rem]" />    {/* Employee ID */}
               <col />                          {/* Name (flex) */}
-              <col className="w-[5.5rem]" />  {/* In */}
-              <col className="w-[5.5rem]" />  {/* Out */}
-              <col className="w-[6.5rem]" />  {/* Work Hours */}
-              <col className="w-[7.5rem]" />  {/* Basic Salary */}
-              <col className="w-[5.5rem]" />  {/* OT Hours */}
-              <col className="w-[7rem]" />    {/* OT 1 */}
-              <col className="w-[7rem]" />    {/* OT 2 */}
-              <col className="w-[7rem]" />    {/* OT Total */}
-              <col className="w-[8rem]" />    {/* Total Salary */}
+              <col className="w-[5rem]" />  {/* In */}
+              <col className="w-[5rem]" />  {/* Out */}
+              <col className="w-[6rem]" />  {/* Work Hours */}
+              <col className="w-[5.5rem]" />  {/* Basic Salary */}
+              <col className="w-[5rem]" />  {/* OT Hours */}
+              <col className="w-[6rem]" />    {/* OT 1 */}
+              <col className="w-[6rem]" />    {/* OT 2 */}
+              <col className="w-[6rem]" />    {/* OT Total */}
+              <col className="w-[7rem]" />    {/* Total Salary */}
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
