@@ -6,62 +6,71 @@
     @page { margin: 24px; }
     body {
       font-family: DejaVu Sans, Arial, sans-serif;
-      font-size: 11px;
+      font-size: 10px;                 /* << kecilin font dasar */
       color: #111;
       background: #f8fafc;
     }
 
-    h1 { font-size: 18px; margin: 0; color: #0f254a; }
-    .subtitle { font-size: 11px; color: #5b6b80; margin-top: 3px; }
-    .meta { font-size: 11px; color: #6b7280; margin-top: 6px; }
+    h1 { font-size: 17px; margin: 0; color: #0f254a; }
+    .subtitle { font-size: 10px; color: #5b6b80; margin-top: 3px; }
+    .meta { font-size: 10px; color: #6b7280; margin-top: 6px; }
 
     .brand-wrap{
-      width:95%;
-      margin:0 auto 20px 10px;
+      width:95%; margin:0 auto 16px 10px;
       background:#fff;
-      border:1px solid #dbeafe;
+      border:1.2px solid #7aa2ff;      /* border card lebih tegas */
       border-radius:8px;
-      padding:16px 18px;
+      padding:14px 16px;
     }
-    .brand{ width:100%; border-bottom:2px solid #dbeafe; padding-bottom:10px; margin-bottom:14px; }
+    .brand{ width:100%; border-bottom:2px solid #7aa2ff; padding-bottom:8px; margin-bottom:12px; }
     .brand td{ vertical-align:middle; }
-    .brand .side{ width:80px; }
+    .brand .side{ width:78px; }
     .brand .center{ text-align:center; }
-    .logo{ width:56px; height:56px; object-fit:contain; }
+    .logo{ width:54px; height:54px; object-fit:contain; }
 
-    table{ width:100%; border-collapse:collapse; }
+    /* ===== TABEL ===== */
+    table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout: auto;              /* biar DomPDF atur kolom */
+      border:1.2px solid #7aa2ff;      /* outline tabel */
+    }
     th,td{
-      border:1px solid #cfe0ff;
-      padding:8px 10px;
-      text-align:left;              /* <<< rata kiri untuk semua sel */
+      border:1.1px solid #7aa2ff;      /* border sel lebih gelap & tegas */
+      padding:6px 8px;                 /* << kecilin padding */
+      text-align:left;                 /* semua rata kiri */
+      white-space:nowrap;              /* cegah patah baris */
+      line-height:1.22;
+      vertical-align:middle;
+      font-size: 10px;                 /* samakan ukuran isi sel */
     }
 
-    /* Header & Footer table dengan biru solid (aman di DomPDF) */
+    /* Header & Footer tabel biru solid */
     thead th{
-      background:#e8f1ff;          /* biru muda solid */
+      background:#d7e9ff;              /* biru solid */
       color:#0f254a;
       font-weight:700;
-      font-size:11.5px;
-      border-bottom:2px solid #93c5fd;
+      border-bottom:2px solid #7aa2ff;
     }
     tfoot th, tfoot td{
-      background:#e8f1ff;          /* biru muda solid */
+      background:#d7e9ff;              /* biru solid */
       font-weight:700;
-      border-top:2px solid #93c5fd;
+      border-top:2px solid #7aa2ff;
     }
 
-    /* zebra rows untuk tbody */
-    tbody tr:nth-child(even) td { background:#f9fbff; }
+    /* zebra body */
+    tbody tr:nth-child(even) td { background:#f4f8ff; }
     tbody tr:nth-child(odd)  td { background:#ffffff; }
 
+    /* badge jam kerja – lebih kecil */
     .chip{
-      display:inline-block; padding:2px 6px; border-radius:999px;
-      font-size:10px; font-weight:700;
+      display:inline-block; padding:1px 5px; border-radius:999px;
+      font-size:9px; font-weight:700;
     }
     .chip-ok  { background:#dcfce7; color:#166534; }
     .chip-dim { background:#f1f5f9; color:#334155; }
 
-    .footer{ margin-top:12px; text-align:center; font-size:10px; color:#6b7280; }
+    .footer{ margin-top:10px; text-align:center; font-size:9.5px; color:#6b7280; }
   </style>
 </head>
 <body>
@@ -89,7 +98,7 @@
         @if($logoExists)
           <img src="{{ $logoPathFs }}" alt="KMI Logo" class="logo">
         @else
-          <div style="width:56px;height:56px;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;background:#f9fafb;">KMI</div>
+          <div style="width:54px;height:54px;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;background:#f9fafb;">KMI</div>
         @endif
       </td>
       <td class="center">
