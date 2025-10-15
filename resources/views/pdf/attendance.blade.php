@@ -11,121 +11,57 @@
       background: #f8fafc;
     }
 
-    h1 {
-      font-size: 18px;
-      margin: 0;
-      color: #0f254a;
+    h1 { font-size: 18px; margin: 0; color: #0f254a; }
+    .subtitle { font-size: 11px; color: #5b6b80; margin-top: 3px; }
+    .meta { font-size: 11px; color: #6b7280; margin-top: 6px; }
+
+    .brand-wrap{
+      width:95%;
+      margin:0 auto 20px 10px;
+      background:#fff;
+      border:1px solid #dbeafe;
+      border-radius:8px;
+      padding:16px 18px;
+    }
+    .brand{ width:100%; border-bottom:2px solid #dbeafe; padding-bottom:10px; margin-bottom:14px; }
+    .brand td{ vertical-align:middle; }
+    .brand .side{ width:80px; }
+    .brand .center{ text-align:center; }
+    .logo{ width:56px; height:56px; object-fit:contain; }
+
+    table{ width:100%; border-collapse:collapse; }
+    th,td{
+      border:1px solid #cfe0ff;
+      padding:8px 10px;
+      text-align:left;              /* <<< rata kiri untuk semua sel */
     }
 
-    .subtitle {
-      font-size: 11px;
-      color: #5b6b80;
-      margin-top: 3px;
-    }
-
-    .meta {
-      font-size: 11px;
-      color: #6b7280;
-      margin-top: 6px;
-    }
-
-    .brand-wrap {
-      width: 95%;
-      margin: 0 auto 20px 10px; /* <== digeser sedikit ke kiri */
-      background: #fff;
-      border: 1px solid #dbeafe;
-      border-radius: 8px;
-      padding: 16px 18px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-    }
-
-    .brand {
-      width: 100%;
-      border-bottom: 2px solid #dbeafe;
-      padding-bottom: 10px;
-      margin-bottom: 14px;
-    }
-
-    .brand td {
-      vertical-align: middle;
-    }
-
-    .brand .side {
-      width: 80px;
-    }
-
-    .brand .center {
-      text-align: center;
-    }
-
-    .logo {
-      width: 56px;
-      height: 56px;
-      object-fit: contain;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    th, td {
-      border: 1px solid #dbeafe;
-      padding: 8px 10px;
-    }
-
-    th {
-      background: linear-gradient(to bottom, #e9f2ff, #dbeafe);
-      text-align: left;
-      font-weight: 700;
-      color: #0f254a;
-      font-size: 11.5px;
-    }
-
-    td {
-      background: #ffffff;
-    }
-
-    tr:nth-child(even) td {
-      background: #f9fbff;
-    }
-
-    tfoot th, tfoot td {
-      background: #eef6ff;
-      font-weight: 700;
-      border-top: 2px solid #93c5fd;
-    }
-
-    .right { text-align: right; }
-
-    .chip {
-      display:inline-block;
-      padding:2px 6px;
-      border-radius:999px;
-      font-size:10px;
+    /* Header & Footer table dengan biru solid (aman di DomPDF) */
+    thead th{
+      background:#e8f1ff;          /* biru muda solid */
+      color:#0f254a;
       font-weight:700;
+      font-size:11.5px;
+      border-bottom:2px solid #93c5fd;
+    }
+    tfoot th, tfoot td{
+      background:#e8f1ff;          /* biru muda solid */
+      font-weight:700;
+      border-top:2px solid #93c5fd;
     }
 
-    .chip-ok { background:#dcfce7; color:#166534; }
+    /* zebra rows untuk tbody */
+    tbody tr:nth-child(even) td { background:#f9fbff; }
+    tbody tr:nth-child(odd)  td { background:#ffffff; }
+
+    .chip{
+      display:inline-block; padding:2px 6px; border-radius:999px;
+      font-size:10px; font-weight:700;
+    }
+    .chip-ok  { background:#dcfce7; color:#166534; }
     .chip-dim { background:#f1f5f9; color:#334155; }
 
-    /* Footer */
-    .footer {
-      margin-top: 12px;
-      text-align: center;
-      font-size: 10px;
-      color: #6b7280;
-    }
-
-    /* Page footer text for DomPDF */
-    .page-number {
-      font-size: 9px;
-      color: #6b7280;
-      text-align: right;
-    }
+    .footer{ margin-top:12px; text-align:center; font-size:10px; color:#6b7280; }
   </style>
 </head>
 <body>
@@ -137,26 +73,13 @@
       return (int) round($billable * $HOURLY_RATE);
   };
   $fmtRupiah = fn($n) => 'Rp ' . number_format((float)$n, 0, ',', '.');
-  $fmtDate = fn($d) => $d ? substr((string)$d, 0, 10) : '-';
-  $fmtTime = fn($t) => $t && strlen($t) >= 5 ? substr((string)$t, 0, 5) : ($t ?: '-');
+  $fmtDate   = fn($d) => $d ? substr((string)$d, 0, 10) : '-';
+  $fmtTime   = fn($t) => $t && strlen($t) >= 5 ? substr((string)$t, 0, 5) : ($t ?: '-');
 
   $logoPathFs = public_path('img/logo-kmi.png');
   $logoExists = file_exists($logoPathFs);
 
-  $sumWork = $sumDaily = $sumOTHours = $sumOT1 = $sumOT2 = $sumOTTotal = 0;
-  foreach ($rows as $r) {
-    $work  = (float)($r->real_work_hour ?? 0);
-    $otH   = (float)($r->overtime_hours ?? 0);
-    $ot1   = (float)($r->overtime_first_amount ?? 0);
-    $ot2   = (float)($r->overtime_second_amount ?? 0);
-    $otTot = (float)($r->overtime_total_amount ?? 0);
-    $sumWork += $work;
-    $sumDaily += $calcDailyTotal($work);
-    $sumOTHours += $otH;
-    $sumOT1 += $ot1;
-    $sumOT2 += $ot2;
-    $sumOTTotal += $otTot;
-  }
+  $sumWork = $sumDaily = $sumOTHours = $sumOT1 = $sumOT2 = $sumOTTotal = $sumTotalSalary = 0;
 @endphp
 
 <div class="brand-wrap">
@@ -166,17 +89,13 @@
         @if($logoExists)
           <img src="{{ $logoPathFs }}" alt="KMI Logo" class="logo">
         @else
-          <div style="width:56px;height:56px;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;background:#f9fafb;">
-            KMI
-          </div>
+          <div style="width:56px;height:56px;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;background:#f9fafb;">KMI</div>
         @endif
       </td>
       <td class="center">
         <h1>Attendance Payroll — PT Kayu Mebel Indonesia</h1>
-        <div class="subtitle">Employee Attendance & Overtime Recap</div>
-        <div class="meta">
-          Period: <b>{{ $from }}</b> → <b>{{ $to }}</b> • Generated: {{ now()->format('Y-m-d H:i') }}
-        </div>
+        <div class="subtitle">Employee Attendance &amp; Overtime Recap</div>
+        <div class="meta">Period: <b>{{ $from }}</b> → <b>{{ $to }}</b> • Generated: {{ now()->format('Y-m-d H:i') }}</div>
       </td>
       <td class="side"></td>
     </tr>
@@ -188,25 +107,35 @@
         <th>Date</th>
         <th>Employee ID</th>
         <th>Name</th>
-        <th>Clock In</th>
-        <th>Clock Out</th>
-        <th class="right">Work Hour</th>
-        <th class="right">Base Salary</th>
-        <th class="right">OT Hours</th>
-        <th class="right">OT 1 (1.5×)</th>
-        <th class="right">OT 2 (2×)</th>
-        <th class="right">OT Total</th>
+        <th>In</th>
+        <th>Out</th>
+        <th>Work Hours</th>
+        <th>Basic Salary</th>
+        <th>OT Hours</th>
+        <th>OT 1 (1.5×)</th>
+        <th>OT 2 (2×)</th>
+        <th>OT Total</th>
+        <th>Total Salary</th>
       </tr>
     </thead>
     <tbody>
       @foreach ($rows as $r)
         @php
-          $work  = (float)($r->real_work_hour ?? 0);
-          $otH   = (float)($r->overtime_hours ?? 0);
-          $ot1   = (float)($r->overtime_first_amount ?? 0);
-          $ot2   = (float)($r->overtime_second_amount ?? 0);
-          $otTot = (float)($r->overtime_total_amount ?? 0);
-          $daily = $calcDailyTotal($work);
+          $work   = (float)($r->real_work_hour ?? 0);
+          $otH    = (float)($r->overtime_hours ?? 0);
+          $ot1    = (float)($r->overtime_first_amount ?? 0);
+          $ot2    = (float)($r->overtime_second_amount ?? 0);
+          $otTot  = (float)($r->overtime_total_amount ?? 0);
+          $daily  = $calcDailyTotal($work);
+          $totSal = $daily + $otTot;
+
+          $sumWork        += $work;
+          $sumDaily       += $daily;
+          $sumOTHours     += $otH;
+          $sumOT1         += $ot1;
+          $sumOT2         += $ot2;
+          $sumOTTotal     += $otTot;
+          $sumTotalSalary += $totSal;
         @endphp
         <tr>
           <td>{{ $fmtDate($r->schedule_date) }}</td>
@@ -214,31 +143,32 @@
           <td>{{ $r->full_name }}</td>
           <td>{{ $fmtTime($r->clock_in) }}</td>
           <td>{{ $fmtTime($r->clock_out) }}</td>
-          <td class="right">
+          <td>
             @if($work >= 7)
               <span class="chip chip-ok">{{ number_format($work, 2, ',', '.') }} h</span>
             @else
               <span class="chip chip-dim">{{ number_format($work, 2, ',', '.') }} h</span>
             @endif
           </td>
-          <td class="right">{{ $fmtRupiah($daily) }}</td>
-          <td class="right">{{ number_format($otH, 0, ',', '.') }}</td>
-          <td class="right">{{ $fmtRupiah($ot1) }}</td>
-          <td class="right">{{ $fmtRupiah($ot2) }}</td>
-          <td class="right">{{ $fmtRupiah($otTot) }}</td>
+          <td>{{ $fmtRupiah($daily) }}</td>
+          <td>{{ number_format($otH, 0, ',', '.') }}</td>
+          <td>{{ $fmtRupiah($ot1) }}</td>
+          <td>{{ $fmtRupiah($ot2) }}</td>
+          <td>{{ $fmtRupiah($otTot) }}</td>
+          <td>{{ $fmtRupiah($totSal) }}</td>
         </tr>
       @endforeach
     </tbody>
-
     <tfoot>
       <tr>
-        <th colspan="5" class="right">Grand Total</th>
-        <th class="right">{{ number_format($sumWork, 2, ',', '.') }}</th>
-        <th class="right">{{ $fmtRupiah($sumDaily) }}</th>
-        <th class="right">{{ number_format($sumOTHours, 0, ',', '.') }}</th>
-        <th class="right">{{ $fmtRupiah($sumOT1) }}</th>
-        <th class="right">{{ $fmtRupiah($sumOT2) }}</th>
-        <th class="right">{{ $fmtRupiah($sumOTTotal) }}</th>
+        <th colspan="5">Grand Total</th>
+        <th>{{ number_format($sumWork, 2, ',', '.') }}</th>
+        <th>{{ $fmtRupiah($sumDaily) }}</th>
+        <th>{{ number_format($sumOTHours, 0, ',', '.') }}</th>
+        <th>{{ $fmtRupiah($sumOT1) }}</th>
+        <th>{{ $fmtRupiah($sumOT2) }}</th>
+        <th>{{ $fmtRupiah($sumOTTotal) }}</th>
+        <th>{{ $fmtRupiah($sumTotalSalary) }}</th>
       </tr>
     </tfoot>
   </table>
