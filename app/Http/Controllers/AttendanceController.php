@@ -4,17 +4,45 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttendanceController extends Controller
 {
+    /**
+     * List data: default range = 1st day of current month -> today (Asia/Jakarta).
+     */
     public function index(Request $req)
     {
         $branch = (int)($req->query('branch_id', 21089));
-        $from   = $req->query('from', '2025-05-01');
-        $to     = $req->query('to', now('Asia/Jakarta')->toDateString());
-        $q      = trim((string)$req->query('q', ''));
+
+        // Default: bulan ini sampai hari ini (Asia/Jakarta)
+        $tz         = 'Asia/Jakarta';
+        $today      = now($tz)->toDateString();
+        $monthStart = now($tz)->startOfMonth()->toDateString();
+
+        // Ambil dari query jika ada; kalau invalid pakai default
+        $from = $req->query('from', $monthStart);
+        $to   = $req->query('to', $today);
+
+        try {
+            $from = Carbon::parse($from, $tz)->toDateString();
+        } catch (\Throwable $e) {
+            $from = $monthStart;
+        }
+        try {
+            $to = Carbon::parse($to, $tz)->toDateString();
+        } catch (\Throwable $e) {
+            $to = $today;
+        }
+
+        // Jika from > to, tukar biar aman
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $q = trim((string)$req->query('q', ''));
 
         $builder = Attendance::query()
             ->select([
@@ -24,47 +52,65 @@ class AttendanceController extends Controller
             ])
             ->where('branch_id', $branch)
             ->whereBetween('schedule_date', [$from, $to])
-            // urut sesuai index komposit: (branch_id, schedule_date, employee_id)
+            // urut sesuai index: (schedule_date, employee_id) di dalam branch
             ->orderBy('schedule_date', 'asc')
             ->orderBy('employee_id', 'asc');
 
         if ($q !== '') {
-            // Prefix match agar bisa pakai index (lebih cepat daripada %q%)
+            // Prefix match agar bisa memanfaatkan index (hindari %q%)
             $builder->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
                   ->orWhere('full_name', 'like', $q.'%');
             });
         }
 
-        // Jika nanti data jadi super besar, boleh ganti ke simplePaginate(100)
+        // paginate (bisa diganti simplePaginate(100) kalau total rows sangat besar)
         $rows = $builder->paginate(100)->withQueryString();
 
         return Inertia::render('Attendance/Index', [
             'rows'    => $rows,
             'filters' => ['branch_id' => $branch, 'from' => $from, 'to' => $to, 'q' => $q],
-            'locale'  => app()->getLocale(),
+            // 'locale'  => app()->getLocale(), // dihapus: tidak pakai bilingual
         ]);
     }
 
+    /**
+     * Export CSV / Excel-compatible CSV / PDF.
+     * CSV di-stream per chunk agar hemat memori dan cepat.
+     */
     public function export(Request $req)
     {
         $format = strtolower($req->query('format', 'csv')); // csv | xlsx | pdf
         $branch = (int)($req->query('branch_id', 21089));
-        $from   = $req->query('from', '2025-05-01');
-        $to     = $req->query('to', now('Asia/Jakarta')->toDateString());
-        $q      = trim((string)$req->query('q', ''));
+
+        $tz         = 'Asia/Jakarta';
+        $today      = now($tz)->toDateString();
+        $monthStart = now($tz)->startOfMonth()->toDateString();
+
+        $from = $req->query('from', $monthStart);
+        $to   = $req->query('to', $today);
+
+        try {
+            $from = Carbon::parse($from, $tz)->toDateString();
+        } catch (\Throwable $e) {
+            $from = $monthStart;
+        }
+        try {
+            $to = Carbon::parse($to, $tz)->toDateString();
+        } catch (\Throwable $e) {
+            $to = $today;
+        }
+        if ($from > $to) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $q = trim((string)$req->query('q', ''));
 
         $baseQuery = Attendance::query()
-            ->select([
-                'schedule_date','employee_id','full_name','clock_in','clock_out',
-                'real_work_hour','overtime_hours','overtime_first_amount',
-                'overtime_second_amount','overtime_total_amount'
-            ])
             ->where('branch_id', $branch)
-            ->whereBetween('schedule_date', [$from, $to])
-            ->orderBy('schedule_date', 'asc')
-            ->orderBy('employee_id', 'asc');
+            ->whereBetween('schedule_date', [$from, $to]);
 
+        // filter pencarian (prefix)
         if ($q !== '') {
             $baseQuery->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
@@ -72,12 +118,16 @@ class AttendanceController extends Controller
             });
         }
 
+        // Urutan final untuk export
+        $baseQuery->orderBy('schedule_date', 'asc')
+                  ->orderBy('employee_id', 'asc');
+
         $filenameBase = "attendance_{$branch}_{$from}_{$to}";
 
-        // CSV: pakai streaming + chunkById biar hemat RAM
+        // ===== CSV / Excel-compatible CSV =====
         if ($format === 'csv' || $format === 'xlsx') {
-            // NOTE: jika butuh XLSX beneran, install maatwebsite/excel (lihat catatan bawah).
-            $filename = $filenameBase . ($format === 'xlsx' ? '.xlsx.csv' : '.csv'); // Excel-compatible CSV
+            // NOTE: Jika mau XLSX asli, install maatwebsite/excel; di sini tetap CSV agar ringan & universal.
+            $filename = $filenameBase . ($format === 'xlsx' ? '.xlsx.csv' : '.csv');
             $headers = [
                 'Content-Type'        => 'text/csv; charset=UTF-8',
                 'Content-Disposition' => 'attachment; filename="'.$filename.'"',
@@ -88,31 +138,38 @@ class AttendanceController extends Controller
                 'Work Hour','OT Hours','OT 1 (1.5x)','OT 2 (2x)','OT Total'
             ];
 
-            $callback = function () use ($baseQuery, $columns) {
+            $selectCols = [
+                'schedule_date','employee_id','full_name','clock_in','clock_out',
+                'real_work_hour','overtime_hours','overtime_first_amount',
+                'overtime_second_amount','overtime_total_amount',
+            ];
+
+            $callback = function () use ($baseQuery, $columns, $selectCols) {
                 $out = fopen('php://output', 'w');
-                // BOM UTF-8 agar Excel Windows tidak berantakan
+                // BOM UTF-8 agar Excel Windows aman
                 fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
                 fputcsv($out, $columns);
 
-                // stream per-chunk
-                $baseQuery->clone()->orderBy('id')->chunk(2000, function ($chunk) use ($out) {
-                    foreach ($chunk as $r) {
-                        fputcsv($out, [
-                            $r->schedule_date,
-                            $r->employee_id,
-                            $r->full_name,
-                            $r->clock_in ?? '-',
-                            $r->clock_out ?? '-',
-                            (string)$r->real_work_hour,
-                            (int)$r->overtime_hours,
-                            (int)$r->overtime_first_amount,
-                            (int)$r->overtime_second_amount,
-                            (int)$r->overtime_total_amount,
-                        ]);
-                    }
-                    // flush tiap chunk
-                    if (function_exists('flush')) { flush(); }
-                });
+                // stream per-chunk (urut tetap dijaga di $baseQuery di atas)
+                (clone $baseQuery)
+                    ->select($selectCols)
+                    ->chunk(2000, function ($chunk) use ($out) {
+                        foreach ($chunk as $r) {
+                            fputcsv($out, [
+                                $r->schedule_date,
+                                $r->employee_id,
+                                $r->full_name,
+                                $r->clock_in ?? '-',
+                                $r->clock_out ?? '-',
+                                (string)$r->real_work_hour,
+                                (int)$r->overtime_hours,
+                                (int)$r->overtime_first_amount,
+                                (int)$r->overtime_second_amount,
+                                (int)$r->overtime_total_amount,
+                            ]);
+                        }
+                        if (function_exists('flush')) { flush(); }
+                    });
 
                 fclose($out);
             };
@@ -120,9 +177,15 @@ class AttendanceController extends Controller
             return response()->stream($callback, 200, $headers);
         }
 
+        // ===== PDF =====
         if ($format === 'pdf') {
-            // BUTUH package: barryvdh/laravel-dompdf (lihat catatan bawah)
-            $rows = $baseQuery->get();
+            // BUTUH: composer require barryvdh/laravel-dompdf
+            $rows = (clone $baseQuery)->select([
+                'schedule_date','employee_id','full_name','clock_in','clock_out',
+                'real_work_hour','overtime_hours','overtime_first_amount',
+                'overtime_second_amount','overtime_total_amount'
+            ])->get();
+
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.attendance', [
                 'rows'   => $rows,
                 'from'   => $from,
@@ -130,11 +193,10 @@ class AttendanceController extends Controller
                 'branch' => $branch,
             ])->setPaper('a4', 'landscape');
 
-            return $pdf->download($filenameBase.'.pdf');
+            return $pdf->download($filenameBase . '.pdf');
         }
 
-        // fallback
+        // Fallback
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
-
 }
