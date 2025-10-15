@@ -12,6 +12,7 @@ export default function Login() {
 
   const [showPassword, setShowPassword] = useState(false)
   const [capsLockOn, setCapsLockOn] = useState(false)
+  const [logoError, setLogoError] = useState(false)
 
   const submit = (e) => {
     e.preventDefault()
@@ -48,8 +49,20 @@ export default function Login() {
           <div className="rounded-2xl shadow-2xl border border-white/30 bg-white/60 backdrop-blur-md overflow-hidden">
             {/* Header */}
             <div className="px-5 sm:px-6 pt-7 sm:pt-8 pb-5 sm:pb-6 text-center bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white">
-              <div className="mx-auto h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-white/20 ring-2 ring-white/30 grid place-items-center text-xl font-extrabold">
-                AP
+              <div className="mx-auto h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-white/20 ring-2 ring-white/30 grid place-items-center">
+                {/* Logo image (public/img/logo-kmi.png). Fallback to "AP" if image fails. */}
+                {!logoError ? (
+                  <img
+                    src="/img/logo-kmi.png"
+                    alt="KMI Logo"
+                    className="h-12 w-12 sm:h-14 sm:w-14 object-contain drop-shadow"
+                    onError={() => setLogoError(true)}
+                    decoding="async"
+                    loading="eager"
+                  />
+                ) : (
+                  <span className="text-xl font-extrabold">AP</span>
+                )}
               </div>
               <h1 className="mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight">
                 Attendance Payroll
@@ -59,7 +72,6 @@ export default function Login() {
 
             {/* Body */}
             <div className="p-5 sm:p-6 md:p-7">
-              {/* Error banner (aria-live untuk screen reader) */}
               {(flashError || errors.email || errors.password) && (
                 <div
                   className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
@@ -88,7 +100,7 @@ export default function Login() {
                       autoComplete="username"
                       inputMode="email"
                       className={`${baseInput} ${errors.email ? errorInput : normalInput} pl-10`}
-                      placeholder="you@company.com"
+                      placeholder="admin@attenpay.co.id"
                       value={data.email}
                       onChange={(e) => setData('email', e.target.value)}
                     />
