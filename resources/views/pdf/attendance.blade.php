@@ -6,7 +6,7 @@
     @page { margin: 24px; }
     body {
       font-family: DejaVu Sans, Arial, sans-serif;
-      font-size: 10px;                 /* kecilin font dasar */
+      font-size: 10px;
       color: #111;
       background: #f8fafc;
     }
@@ -18,7 +18,7 @@
     .brand-wrap{
       width:95%; margin:0 auto 16px 10px;
       background:#fff;
-      border:1.2px solid #7aa2ff;      /* border card lebih tegas */
+      border:1.2px solid #7aa2ff;
       border-radius:8px;
       padding:14px 16px;
     }
@@ -32,37 +32,34 @@
     table{
       width:100%;
       border-collapse:collapse;
-      table-layout: auto;              /* biar DomPDF atur kolom */
-      border:1.2px solid #7aa2ff;      /* outline tabel */
+      table-layout:auto;
+      border:1.2px solid #7aa2ff;
     }
     th,td{
-      border:1.1px solid #7aa2ff;      /* border sel lebih gelap & tegas */
-      padding:6px 8px;                 /* kecilin padding */
-      text-align:left;                 /* semua rata kiri */
-      white-space:nowrap;              /* cegah patah baris */
+      border:1.1px solid #7aa2ff;
+      padding:6px 8px;
+      text-align:left;
+      white-space:nowrap;
       line-height:1.22;
       vertical-align:middle;
-      font-size: 10px;                 /* samakan ukuran isi sel */
+      font-size:10px;
     }
 
-    /* Header & Footer tabel biru solid */
     thead th{
-      background:#d7e9ff;              /* biru solid */
+      background:#d7e9ff;
       color:#0f254a;
       font-weight:700;
       border-bottom:2px solid #7aa2ff;
     }
     tfoot th, tfoot td{
-      background:#d7e9ff;              /* biru solid */
+      background:#d7e9ff;
       font-weight:700;
       border-top:2px solid #7aa2ff;
     }
 
-    /* zebra body */
     tbody tr:nth-child(even) td { background:#f4f8ff; }
     tbody tr:nth-child(odd)  td { background:#ffffff; }
 
-    /* badge jam kerja – lebih kecil */
     .chip{
       display:inline-block; padding:1px 5px; border-radius:999px;
       font-size:9px; font-weight:700;
@@ -75,8 +72,20 @@
 </head>
 <body>
 @php
-  // ===== Helper & Fallback untuk data lama =====
+  // ===== Helper & Fallback =====
   $FALLBACK_RATE = 28153;
+
+  // Bersihkan branch_name: ambil bagian sebelum " – ...", " — ...", atau "- ..."
+  $cleanBranchName = function ($name) {
+      if (empty($name)) return 'PT Kayu Mebel Indonesia (KMI)';
+      $parts = preg_split('/\s[–—-]\s/u', (string)$name);
+      $base  = trim($parts[0] ?? '');
+      return $base !== '' ? $base : 'PT Kayu Mebel Indonesia (KMI)';
+  };
+
+  // Ambil brand title dari baris pertama jika ada; kalau tidak, fallback
+  $firstRow   = (isset($rows) && count($rows)) ? (is_array($rows) ? $rows[0] : $rows->first()) : null;
+  $brandTitle = $cleanBranchName($firstRow->branch_name ?? 'PT Kayu Mebel Indonesia (KMI)');
 
   $safeNum = function ($v, $def = 0) {
       $n = is_null($v) ? $def : (float)$v;
@@ -90,13 +99,11 @@
   };
 
   $billableHours = function ($row) use ($safeNum) {
-      // Pakai daily_billable_hours jika ada; fallback min(7, real_work_hour)
       if (!is_null($row->daily_billable_hours)) {
           $b = max(0, $safeNum($row->daily_billable_hours, 0));
       } else {
           $b = min(7, max(0, $safeNum($row->real_work_hour, 0)));
       }
-      // batasi 2 desimal untuk tampilan rapi
       return round($b, 2);
   };
 
@@ -105,11 +112,9 @@
   };
 
   $dailyFinal = function ($row) use ($basicSalary, $safeNum) {
-      // Jika daily_total_amount sudah disimpan (final: base+OT), pakai itu.
       if (!is_null($row->daily_total_amount) && is_numeric($row->daily_total_amount)) {
           return (int)$row->daily_total_amount;
       }
-      // Fallback: base + OT total
       $otTot = (int)$safeNum($row->overtime_total_amount, 0);
       return (int)$basicSalary($row) + $otTot;
   };
@@ -135,9 +140,12 @@
         @endif
       </td>
       <td class="center">
-        <h1>Attendance Payroll — PT Kayu Mebel Indonesia</h1>
+        <h1>Attendance Payroll — {{ $brandTitle }}</h1>
         <div class="subtitle">Employee Attendance &amp; Overtime Recap</div>
-        <div class="meta">Period: <b>{{ $from }}</b> → <b>{{ $to }}</b> • Generated: {{ now()->format('Y-m-d H:i') }}</div>
+        <div class="meta">
+          Period: <b>{{ $from }}</b> → <b>{{ $to }}</b>
+          • Generated: {{ now()->format('Y-m-d H:i') }}
+        </div>
       </td>
       <td class="side"></td>
     </tr>
@@ -169,8 +177,8 @@
           $ot2    = $safeNum($r->overtime_second_amount, 0);
           $otTot  = $safeNum($r->overtime_total_amount, 0);
 
-          $base   = $basicSalary($r);      // pakai hourly_rate_used × daily_billable_hours (fallback jika kosong)
-          $totSal = $dailyFinal($r);       // pakai daily_total_amount jika ada, fallback base+OT
+          $base   = $basicSalary($r);
+          $totSal = $dailyFinal($r);
 
           $sumWork    += $work;
           $sumBase    += $base;
@@ -217,14 +225,14 @@
   </table>
 
   <div class="footer">
-    <p><b>PT Kayu Mebel Indonesia</b> — Automated Payroll System</p>
+    <p><b>{{ $brandTitle }}</b> — Automated Payroll System</p>
     <p>Generated on {{ now()->format('Y-m-d H:i') }}</p>
   </div>
 </div>
 
 <script type="text/php">
 if (isset($pdf)) {
-  // sesuaikan koordinat jika butuh (x, y)
+  // Sesuaikan posisi jika perlu (x, y) untuk A4 landscape
   $pdf->page_text(520, 810, "Page {PAGE_NUM}/{PAGE_COUNT}", null, 8, [0.4,0.4,0.4]);
 }
 </script>
