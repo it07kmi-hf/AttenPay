@@ -5,6 +5,7 @@ const LOGO_KMI = '/img/logo-kmi.png'
 const PER_PAGE = 10
 
 export default function Index({ rows, filters, employeeTotals = {} }) {
+  // filters state
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
@@ -17,6 +18,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
+  // live search debounce
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
@@ -32,6 +34,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
   const data = rows?.data ?? []
 
+  // format helpers
   const fmtTime = (val) => {
     if (!val) return '-'
     const m = String(val).match(/\b(\d{2}:\d{2})/)
@@ -53,9 +56,11 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     return String(name).split(/\s[–—-]\s/)[0]
   }
 
+  // presence logic
   const isPresent = (r) =>
     !!(r.clock_in && r.clock_out && Number(r.real_work_hour) > 0)
 
+  // calculations (0 if not present)
   const hourlyRate = (r) => isPresent(r) ? safeNum(r.hourly_rate_used) : 0
   const billableHours = (r) => {
     if (!isPresent(r)) return 0
@@ -80,6 +85,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     return isPresent(r) ? (baseSalary(r) + otTotal(r)) : 0
   }
 
+  // search actions
   const search = (e) => {
     e.preventDefault()
     router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage }, {
@@ -91,6 +97,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, { replace: true, preserveScroll: true })
   }
 
+  // export
   const exportUrl = (fmt) =>
     `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
   const confirmExport = async (fmt) => {
@@ -124,6 +131,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     }
   }
 
+  // pagination
   const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
   const last    = rows?.last_page    ?? rows?.meta?.last_page    ?? 1
   const total   = rows?.total        ?? rows?.meta?.total        ?? 0
@@ -140,8 +148,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     })
   }
 
-  const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
-
+  // group per employee
   const groups = useMemo(() => {
     const map = new Map(), order = []
     data.forEach((r, idx) => {
@@ -180,18 +187,27 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
+          {/* logo + title */}
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
-              <img src={LOGO_KMI} alt="KMI Logo" className="h-full w-full object-contain" loading="eager" decoding="async"
-                   onError={(e) => (e.currentTarget.style.display = 'none')} />
+              <img
+                src={LOGO_KMI}
+                alt="KMI Logo"
+                className="h-full w-full object-contain"
+                loading="eager"
+                decoding="async"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll System</h1>
-              <p className="text-xs sm:text-sm opacity-90 truncate"><b>PT Kayu Mebel Indonesia (KMI)</b></p>
+              <p className="text-xs sm:text-sm opacity-90 truncate">
+                <b>PT Kayu Mebel Indonesia (KMI)</b>
+              </p>
             </div>
           </div>
 
-          {/* Desktop actions */}
+          {/* desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="flex overflow-hidden rounded-lg border border-white/30">
               <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
@@ -199,20 +215,32 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
               <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
-            <Link href="/logout" method="post" as="button" aria-label="Logout"
-              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" strokeWidth="1.8"
-                   className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors">
+            {/* logout */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              aria-label="Logout"
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
+              title="Logout"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
+                  d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M12 9l3 3m0 0l-3 3m3-3H3" />
+                  d="M12 9l3 3m0 0l-3 3m3-3H3" />
               </svg>
             </Link>
           </div>
 
-          {/* Mobile actions */}
+          {/* mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
             <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
             <div className="relative">
@@ -226,15 +254,22 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
               )}
             </div>
 
-            <Link href="/logout" method="post" as="button" aria-label="Logout"
-              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
+            {/* logout icon mobile */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              aria-label="Logout"
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
+              title="Logout"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                    fill="none" stroke="currentColor" strokeWidth="1.8"
                    className="h-5 w-5 text-red-400 hover:text-red-500">
                 <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
+                  d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M12 9l3 3m0 0l-3 3m3-3H3" />
+                  d="M12 9l3 3m0 0l-3 3m3-3H3" />
               </svg>
             </Link>
           </div>
@@ -244,7 +279,10 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
       {/* Period badge */}
       <div className="bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60" aria-label="Selected period">
+          <div
+            className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60"
+            aria-label="Selected period"
+          >
             <span className="font-medium">Period:</span>
             <span className="font-semibold">{from}</span>
             <span>→</span>
@@ -255,18 +293,26 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-5 space-y-6">
-        {/* Filters */}
+        {/* Filters (Desktop) */}
         <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-200 p-3 md:p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div className="md:col-span-2">
               <label className="text-sm">From</label>
-              <input type="date" className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
-                     value={from} onChange={e => setFrom(e.target.value)} />
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                value={from}
+                onChange={e => setFrom(e.target.value)}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm">To</label>
-              <input type="date" className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
-                     value={to} onChange={e => setTo(e.target.value)} />
+              <input
+                type="date"
+                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                value={to}
+                onChange={e => setTo(e.target.value)}
+              />
             </div>
             <div className="md:col-span-1 flex gap-2">
               <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm border border-sky-700">Apply</button>
@@ -285,38 +331,38 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
           </div>
         </form>
 
-        {/* TABLE */}
+        {/* TABLE — includes centered Timeoff column */}
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
           <table className="min-w-[2300px] text-xs md:text-sm table-fixed">
             <colgroup>
-              {/* identitas/meta */}
-              <col className="w-[7rem]" />   {/* Date */}
-              <col className="w-[7rem]" />   {/* Employee ID */}
-              <col className="w-[12rem]" />  {/* Name */}
-              <col className="w-[6rem]" />   {/* Gender */}
-              <col className="w-[8rem]" />   {/* Join Date */}
-              <col className="w-[14rem]" />  {/* Branch Name */}
-              <col className="w-[14rem]" />  {/* Organization */}
-              <col className="w-[12rem]" />  {/* Job Position */}
-              {/* absensi */}
-              <col className="w-[6rem]" />   {/* In */}
-              <col className="w-[6rem]" />   {/* Out */}
-              <col className="w-[12rem]" />  {/* Timeoff ✅ */}
-              <col className="w-[7rem]" />   {/* Work Hours */}
-              {/* lembur */}
-              <col className="w-[6.5rem]" /> {/* OT Hours */}
-              <col className="w-[8rem]" />   {/* OT 1 */}
-              <col className="w-[8rem]" />   {/* OT 2 */}
-              <col className="w-[8rem]" />   {/* OT Total */}
+              {/* identity/meta */}
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[12rem]" />
               {/* presence */}
-              <col className="w-[8rem]" />   {/* Presence Daily */}
-              {/* kalkulasi */}
-              <col className="w-[8rem]" />   {/* Hourly Rate */}
-              <col className="w-[6.5rem]" /> {/* Billable H */}
-              <col className="w-[9rem]" />   {/* Basic Salary */}
-              <col className="w-[9rem]" />   {/* Daily Total */}
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[12rem]" /> {/* Timeoff */}
+              <col className="w-[7rem]" />
+              {/* overtime */}
+              <col className="w-[6.5rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              {/* presence bonus */}
+              <col className="w-[8rem]" />
+              {/* calc */}
+              <col className="w-[8rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[9rem]" />
               {/* tenure */}
-              <col className="w-[7rem]" />   {/* Tenure ≥1y */}
+              <col className="w-[7rem]" />
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
@@ -333,7 +379,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Timeoff</th>{/* ✅ rata tengah header */}
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Timeoff</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Work Hours</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">OT Hours</th>
@@ -360,7 +406,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                 const totalMonthlyOT        = serverTotal?.monthly_ot        ?? g.monthlyOt
                 const totalMonthlyBsott     = serverTotal?.monthly_bsott     ?? g.monthlyBsott
                 const totalMonthlyPresence  = serverTotal?.monthly_presence  ?? g.monthlyPresence
-                const workDays              = serverTotal?.work_days         ?? 0 // ✅ ambil dari server
+                const workDays              = serverTotal?.work_days         ?? 0
                 const bpjsTk = serverTotal?.bpjs_tk  ?? g.bpjsTk
                 const bpjsKes= serverTotal?.bpjs_kes ?? g.bpjsKes
 
@@ -378,7 +424,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                       return (
                         <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                          {/* Identitas / Meta */}
+                          {/* identity */}
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
@@ -389,10 +435,10 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
 
-                          {/* Absensi */}
+                          {/* presence */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
-                          {/* ✅ TIMEOFF: '-' rata tengah */}
+                          {/* Timeoff — centered dash */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">
                             <span className="inline-block w-full text-center">{toName || '-'}</span>
                           </td>
@@ -403,13 +449,13 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                             </span>
                           </td>
 
-                          {/* Lembur */}
+                          {/* overtime */}
                           <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{otHours(r)} h</span></td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot1)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot2)}</td>
                           <td className={`px-3 py-2 whitespace-nowrap font-bold ${otTot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(otTot)}</td>
 
-                          {/* Presence & kalkulasi */}
+                          {/* presence & calc */}
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
@@ -420,7 +466,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                       )
                     })}
 
-                    {/* Subtotal per employee */}
+                    {/* per-employee subtotal */}
                     <tr className="bg-amber-50/60">
                       <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={16}>
                         Grand Total ({g.name})
@@ -433,14 +479,14 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                       </td>
                     </tr>
 
-                    {/* Presence, BPJS & Hari Kerja */}
+                    {/* presence, BPJS & work days */}
                     <tr className="bg-emerald-50/50">
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={22}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
                           <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
-                          <span>Hari Kerja: <b>{workDays}</b> hari</span>{/* ✅ jumlah hari kerja */}
-                          <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
-                          <span>BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></span>
+                          <span>Work Days: <b>{workDays}</b> days</span>
+                          <span>BPJS Employment: <b>{fmtIDR(bpjsTk)}</b></span>
+                          <span>BPJS Health: <b>{fmtIDR(bpjsKes)}</b></span>
                         </div>
                       </td>
                     </tr>
@@ -513,9 +559,9 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                       <div className="mt-3 text-[11px] text-emerald-800 border-t pt-2">
                         <div><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></div>
-                        <div>Hari Kerja: <b>{workDays}</b> hari</div>{/* ✅ tampil di mobile */}
+                        <div>Work Days: <b>{workDays}</b> days</div>
                         <div>OT: <b>{fmtIDR(totalMonthlyOT)}</b> • Daily Total: <b>{fmtIDR(totalMonthlyBsott)}</b></div>
-                        <div>BPJS TK: <b>{fmtIDR(bpjsTk)}</b> • BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></div>
+                        <div>BPJS Employment: <b>{fmtIDR(bpjsTk)}</b> • BPJS Health: <b>{fmtIDR(bpjsKes)}</b></div>
                       </div>
                     </div>
                   )

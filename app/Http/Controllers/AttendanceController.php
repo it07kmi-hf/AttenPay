@@ -12,8 +12,10 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class AttendanceController extends Controller
 {
     /**
-     * Agregat per karyawan untuk seluruh hasil filter.
-     * + Tambahan: work_days = jumlah hadir (jam>0 & punya clock in/out).
+     * Aggregate per-employee totals across the entire filtered range (not per page).
+     * Adds: work_days = number of present days (real_work_hour > 0 AND has clock in & out).
+     * Return: array keyed by employee_id
+     *   ['employee_id','full_name','monthly_ot','monthly_bsott','monthly_presence','bpjs_tk','bpjs_kes','work_days']
      */
     private function buildEmployeeTotals($baseQuery): array
     {
@@ -40,7 +42,7 @@ class AttendanceController extends Controller
                     'monthly_presence' => 0,
                     'bpjs_tk'          => 0,
                     'bpjs_kes'         => 0,
-                    'work_days'        => 0, // ✅ jumlah hari kerja (hadir)
+                    'work_days'        => 0, // number of present days
                 ];
             }
 
@@ -70,7 +72,7 @@ class AttendanceController extends Controller
             $totals[$empId]['monthly_presence'] += $presence;
 
             if ($isPresent) {
-                $totals[$empId]['work_days']++; // ✅ hitung hari hadir
+                $totals[$empId]['work_days']++;
             }
 
             $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
@@ -83,12 +85,12 @@ class AttendanceController extends Controller
     }
 
     /**
-     * List (fixed 10/page, period default bulan-ini → hari-ini).
+     * List page (fixed 10/page). Default period = current month → today (Asia/Jakarta).
      */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
-        $perPage = 10; // ✅ seragam 10
+        $perPage = 10;
 
         $tz         = 'Asia/Jakarta';
         $today      = now($tz)->toDateString();
@@ -106,14 +108,21 @@ class AttendanceController extends Controller
         $builder = Attendance::query()
             ->select([
                 'id',
+                // identity
                 'employee_id','full_name','schedule_date',
+                // presence
                 'clock_in','clock_out','real_work_hour',
-                // ✅ kolom timeoff untuk FE
+                // timeoff
                 'timeoff_id','timeoff_name',
+                // overtime (IDR)
                 'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',
+                // org
                 'branch_name','organization_name','job_position',
+                // details
                 'gender','join_date',
+                // calculations
                 'hourly_rate_used','daily_billable_hours','daily_total_amount','tenure_ge_1y',
+                // presence bonus & BPJS
                 'presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
             ])
@@ -158,7 +167,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Export (biarkan seperti sebelumnya).
+     * Export (CSV/Excel/PDF). Left as-is; PDF already supports timeoff_name if needed.
      */
     public function export(Request $req)
     {
@@ -212,7 +221,6 @@ class AttendanceController extends Controller
                 'overtime_second_amount','overtime_total_amount','daily_total_amount',
                 'hourly_rate_used','daily_billable_hours','presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
-                // boleh tambahkan timeoff ke PDF kalau dibutuhkan:
                 'timeoff_name',
             ])->get();
 
@@ -229,7 +237,6 @@ class AttendanceController extends Controller
             return $pdf->download($filenameBase . '.pdf');
         }
 
-        // CSV (tetap sama seperti sebelumnya, tidak wajib timeoff)
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
 }
