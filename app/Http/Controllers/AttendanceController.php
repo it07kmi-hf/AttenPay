@@ -11,18 +11,28 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class AttendanceController extends Controller
 {
-    private const FALLBACK_RATE = 28153;
-
+    /**
+     * Hitung agregat per karyawan untuk seluruh hasil filter (bukan per halaman).
+     * Return: array keyed by employee_id -> [
+     *   'employee_id','full_name','monthly_ot','monthly_bsott','monthly_presence','bpjs_tk','bpjs_kes'
+     * ]
+     * Logika:
+     * - Baris tidak hadir = 0 (Hourly/OT/Presence/Total).
+     * - Jika daily_total_amount numeric → pakai apa adanya (termasuk 0).
+     * - Jika NULL dan hadir → hitung base (rate*billable) + OT. Jika NULL dan tidak hadir → 0.
+     */
     private function buildEmployeeTotals($baseQuery): array
     {
         $rows = (clone $baseQuery)->select([
             'employee_id','full_name',
+            'clock_in','clock_out','real_work_hour',
+            'hourly_rate_used','daily_billable_hours',
             'overtime_total_amount','presence_premium_daily','daily_total_amount',
-            'hourly_rate_used','daily_billable_hours','real_work_hour',
             'bpjs_tk_deduction','bpjs_kes_deduction',
         ])->orderBy('employee_id','asc')->get();
 
         $totals = [];
+
         foreach ($rows as $r) {
             $empId = (string)($r->employee_id ?? '');
             if ($empId === '') continue;
@@ -39,22 +49,26 @@ class AttendanceController extends Controller
                 ];
             }
 
-            $otTot    = (float)($r->overtime_total_amount ?? 0);
-            $presence = (float)($r->presence_premium_daily ?? 0);
+            $clockIn   = trim((string)($r->clock_in  ?? ''));
+            $clockOut  = trim((string)($r->clock_out ?? ''));
+            $hours     = max(0, (float)($r->real_work_hour ?? 0));
+            $isPresent = ($hours > 0 && $clockIn !== '' && $clockOut !== '');
 
-            $rate = is_numeric($r->hourly_rate_used) && $r->hourly_rate_used > 0
-                ? (float)$r->hourly_rate_used
-                : (float)self::FALLBACK_RATE;
+            $otTot     = (float)($r->overtime_total_amount ?? 0);
+            $presence  = (float)($r->presence_premium_daily ?? 0);
 
-            $billable = !is_null($r->daily_billable_hours)
-                ? max(0, (float)$r->daily_billable_hours)
-                : min(7, max(0, (float)($r->real_work_hour ?? 0)));
-
-            $baseSalary = round($billable * $rate, 0);
-
-            $totalDay = is_null($r->daily_total_amount)
-                ? ($baseSalary + $otTot)
-                : (float)$r->daily_total_amount;
+            if (is_numeric($r->daily_total_amount)) {
+                $totalDay = (float)$r->daily_total_amount;
+            } else {
+                if ($isPresent) {
+                    $rate     = max(0, (float)($r->hourly_rate_used ?? 0));
+                    $billable = max(0, (float)($r->daily_billable_hours ?? 0));
+                    $base     = (int)round($rate * $billable);
+                    $totalDay = $base + $otTot;
+                } else {
+                    $totalDay = 0;
+                }
+            }
 
             $totals[$empId]['monthly_ot']       += $otTot;
             $totals[$empId]['monthly_bsott']    += $totalDay;
@@ -69,33 +83,52 @@ class AttendanceController extends Controller
         return $totals;
     }
 
+    /**
+     * List data: default range = tanggal 1 bulan berjalan → hari ini (Asia/Jakarta).
+     * - Default paginate: 35 per page
+     * - Select kolom yang dipakai FE + kolom premi/BPJS
+     */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
-        $perPage = 10;
 
+        // ✅ Default 35 per halaman (batasi max 500)
+        $perPage = (int) $req->query('per_page', 35);
+        $perPage = $perPage > 0 ? min($perPage, 500) : 35;
+
+        // Default: bulan ini sampai hari ini (Asia/Jakarta)
         $tz         = 'Asia/Jakarta';
         $today      = now($tz)->toDateString();
         $monthStart = now($tz)->startOfMonth()->toDateString();
 
+        // Ambil dari query jika ada; jika invalid pakai default
         $from = $req->query('from', $monthStart);
         $to   = $req->query('to', $today);
 
         try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable $e) { $from = $monthStart; }
         try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable $e) { $to   = $today; }
+
         if ($from > $to) { [$from, $to] = [$to, $from]; }
 
         $q = trim((string) $req->query('q', ''));
 
+        // SELECT kolom untuk FE
         $builder = Attendance::query()
             ->select([
                 'id',
+                // identitas
                 'employee_id','full_name','schedule_date',
+                // jam hadir
                 'clock_in','clock_out','real_work_hour',
+                // lembur (rupiah)
                 'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',
-                'branch_name',
-                'gender','organization_name','job_position','join_date',
+                // cabang/org/job
+                'branch_name','organization_name','job_position',
+                // detail
+                'gender','join_date',
+                // audit/kalkulasi
                 'hourly_rate_used','daily_billable_hours','daily_total_amount','tenure_ge_1y',
+                // premi hadir & BPJS
                 'presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
             ])
@@ -105,23 +138,28 @@ class AttendanceController extends Controller
             ->orderBy('employee_id', 'asc');
 
         if ($q !== '') {
+            // prefix match agar pakai index
             $builder->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
                   ->orWhere('full_name', 'like', $q.'%');
             });
         }
 
+        // Paginate
         $rows = $builder->paginate($perPage)->withQueryString();
 
+        // Agregat untuk seluruh range (bukan per halaman)
         $baseQueryForAgg = Attendance::query()
             ->where('branch_id', $branch)
             ->whereBetween('schedule_date', [$from, $to]);
+
         if ($q !== '') {
             $baseQueryForAgg->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
                   ->orWhere('full_name', 'like', $q.'%');
             });
         }
+
         $employeeTotals = $this->buildEmployeeTotals($baseQueryForAgg);
 
         return Inertia::render('Attendance/Index', [
@@ -134,13 +172,16 @@ class AttendanceController extends Controller
                 'per_page'  => $perPage,
             ],
             'employeeTotals' => $employeeTotals,
-            'fallbackRate'   => self::FALLBACK_RATE,
         ]);
     }
 
+    /**
+     * Export CSV / Excel-compatible CSV / PDF.
+     * - CSV menulis "0" untuk nilai kosong (cohort lama).
+     */
     public function export(Request $req)
     {
-        $format = strtolower($req->query('format', 'csv'));
+        $format = strtolower($req->query('format', 'csv')); // csv | xlsx | pdf
         $branch = (int)($req->query('branch_id', 21089));
 
         $tz         = 'Asia/Jakarta';
@@ -167,9 +208,11 @@ class AttendanceController extends Controller
             });
         }
 
+        // Urutkan
         $baseQuery->orderBy('schedule_date', 'asc')
                   ->orderBy('employee_id', 'asc');
 
+        // Nama file
         $meta = (clone $baseQuery)
             ->reorder()
             ->select('employee_id', 'full_name')
@@ -183,8 +226,10 @@ class AttendanceController extends Controller
 
         $filenameBase = "attendance_{$nameSlug}_{$branch}_{$from}_{$to}";
 
+        // ===== CSV / Excel-compatible CSV =====
         if ($format === 'csv' || $format === 'xlsx') {
             $filename = $filenameBase . ($format === 'xlsx' ? '.xlsx.csv' : '.csv');
+
             $headers = [
                 'Content-Type'        => 'text/csv; charset=UTF-8',
                 'Content-Disposition' => 'attachment; filename="'.$filename.'"',
@@ -205,6 +250,7 @@ class AttendanceController extends Controller
 
             $callback = function () use ($baseQuery, $columns, $selectCols) {
                 $out = fopen('php://output', 'w');
+                // BOM UTF-8 untuk Excel Windows
                 fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
                 fputcsv($out, $columns);
 
@@ -214,14 +260,14 @@ class AttendanceController extends Controller
                         foreach ($chunk as $r) {
                             $otTot    = (int) ($r->overtime_total_amount ?? 0);
                             $presence = (int) ($r->presence_premium_daily ?? 0);
-                            $daily    = is_null($r->daily_total_amount) ? 0 : (int) $r->daily_total_amount;
+                            $daily    = is_numeric($r->daily_total_amount) ? (int)$r->daily_total_amount : 0;
 
                             fputcsv($out, [
                                 substr((string)$r->schedule_date, 0, 10),
                                 $r->employee_id,
                                 $r->full_name,
-                                $r->clock_in  ? substr((string)$r->clock_in,  0, 5) : '-',
-                                $r->clock_out ? substr((string)$r->clock_out, 0, 5) : '-',
+                                $r->clock_in  ? substr((string)$r->clock_in,  0, 5) : '',
+                                $r->clock_out ? substr((string)$r->clock_out, 0, 5) : '',
                                 (float)($r->real_work_hour ?? 0),
                                 (float)($r->overtime_hours ?? 0),
                                 (float)($r->overtime_first_amount ?? 0),
@@ -240,6 +286,7 @@ class AttendanceController extends Controller
             return response()->stream($callback, 200, $headers);
         }
 
+        // ===== PDF =====
         if ($format === 'pdf') {
             $rows = (clone $baseQuery)->select([
                 'schedule_date','employee_id','full_name','clock_in','clock_out',
@@ -257,12 +304,12 @@ class AttendanceController extends Controller
                 'to'              => $to,
                 'branch'          => $branch,
                 'employeeTotals'  => $employeeTotals,
-                'fallbackRate'    => self::FALLBACK_RATE,
             ])->setPaper('a4', 'landscape');
 
             return $pdf->download($filenameBase . '.pdf');
         }
 
+        // Fallback
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
 }
