@@ -58,6 +58,13 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   )
   const fmtDate = (v) => (v ? String(v).substring(0,10) : '-')
 
+  // 🚿 Bersihkan branch name → ambil bagian sebelum " – ..."/" — ..."/"- ..."
+  const cleanBranchName = (name) => {
+    if (!name) return '-'
+    // pola: spasi + (–|—|-) + spasi diikuti apapun
+    return String(name).split(/\s[–—-]\s/)[0]
+  }
+
   // ===== Perhitungan (pakai nilai audit jika ada) =====
   const FALLBACK_RATE = Number(fallbackRate || 28153)
   const hourlyRate = (r) => {
@@ -152,7 +159,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   // Group per employee (untuk tampilan per halaman; subtotal diambil dari totalsMap supaya konsisten)
   const groups = useMemo(() => {
     const map = new Map(), order = []
-    ;(rows?.data ?? []).forEach((r, idx) => {
+    data.forEach((r, idx) => {
       const key = `${r.employee_id ?? ''}::${r.full_name ?? ''}`
       if (!map.has(key)) {
         map.set(key, {
@@ -174,7 +181,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
       if (!g.bpjsKes) g.bpjsKes = safeNum(r.bpjs_kes_deduction)
     })
     return order.map(k => map.get(k))
-  }, [rows])
+  }, [data])
 
   return (
     <div
@@ -420,27 +427,14 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                 <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={30}>No data</td></tr>
               )}
 
-              {useMemo(() => {
-                const map = new Map(), order = []
-                data.forEach((r, idx) => {
-                  const key = `${r.employee_id ?? ''}::${r.full_name ?? ''}`
-                  if (!map.has(key)) {
-                    map.set(key, {
-                      key, employee_id: r.employee_id, name: r.full_name, firstIndex: idx,
-                      items: [],
-                    })
-                    order.push(key)
-                  }
-                  map.get(key).items.push(r)
-                })
-                return order.map(k => map.get(k))
-              }, [data]).map((g) => {
-                const serverTotal = (employeeTotals || {})?.[g.employee_id] || null
-                const totalMonthlyOT = serverTotal?.monthly_ot ?? 0
-                const totalMonthlyBsott = serverTotal?.monthly_bsott ?? 0
-                const totalMonthlyPresence = serverTotal?.monthly_presence ?? 0
-                const bpjsTk = serverTotal?.bpjs_tk ?? 0
-                const bpjsKes = serverTotal?.bpjs_kes ?? 0
+              {groups.map((g) => {
+                // ✅ ambil subtotal dari server agar konsisten di halaman berapa pun
+                const serverTotal = totalsMap?.[g.employee_id] || null
+                const totalMonthlyOT = serverTotal?.monthly_ot ?? g.monthlyOt
+                const totalMonthlyBsott = serverTotal?.monthly_bsott ?? g.monthlyBsott
+                const totalMonthlyPresence = serverTotal?.monthly_presence ?? g.monthlyPresence
+                const bpjsTk = serverTotal?.bpjs_tk ?? g.bpjsTk
+                const bpjsKes = serverTotal?.bpjs_kes ?? g.bpjsKes
 
                 return (
                   <React.Fragment key={g.key}>
@@ -475,7 +469,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
                           {/* Shift / Absensi metadata */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{r.branch_id}</td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.branch_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="truncate">{cleanBranchName(r.branch_name)}</div>
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.shift_name ?? '-'}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{r.attendance_code ?? '-'}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.holiday, 'Yes', 'No')}</td>
@@ -506,10 +502,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                         Grand Total ({g.name})
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
-                        OT: {fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_ot ?? 0)}
+                        OT: {fmtIDR(totalMonthlyOT)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
-                        Daily Total: {fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_bsott ?? 0)}
+                        Daily Total: {fmtIDR(totalMonthlyBsott)}
                       </td>
                     </tr>
 
@@ -517,9 +513,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                     <tr className="bg-emerald-50/50">
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={30}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
-                          <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_presence ?? 0)}</b></span>
-                          <span>BPJS TK: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.bpjs_tk ?? 0)}</b></span>
-                          <span>BPJS Kesehatan: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.bpjs_kes ?? 0)}</b></span>
+                          <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
+                          <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
+                          <span>BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></span>
                         </div>
                       </td>
                     </tr>
@@ -535,20 +531,80 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           <div>Total: {total}</div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => goto(Math.max(1, current - 1))} disabled={current === 1} className={`px-3 py-1 rounded border ${current === 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Prev</button>
-            {(() => {
-              const max = last
-              const cur = current
-              if (max <= 7) return Array.from({ length: max }, (_, i) => i + 1)
-              if (cur <= 4) return [1, 2, 3, 4, '…', max]
-              if (cur >= max - 3) return [1, '…', max - 3, max - 2, max - 1, max]
-              return [1, '…', cur - 1, cur, cur + 1, '…', max]
-            })().map((p, i) =>
+            {pages.map((p, i) =>
               p === '…' ? <span key={`e-${i}`} className="px-2 text-slate-500 select-none">…</span> : (
                 <button key={p} onClick={() => goto(p)} className={`px-3 py-1 rounded border ${p === current ? 'bg-sky-600 text-white border-sky-600' : 'bg-white hover:bg-slate-50'}`}>{p}</button>
               )
             )}
             <button onClick={() => goto(Math.min(last, current + 1))} disabled={current === last} className={`px-3 py-1 rounded border ${current === last ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Next</button>
           </div>
+        </div>
+
+        {/* Cards (Mobile) */}
+        <div className="md:hidden space-y-3">
+          {groups.map((g) => {
+            const serverTotal = totalsMap?.[g.employee_id] || null
+            const totalMonthlyOT = serverTotal?.monthly_ot ?? g.monthlyOt
+            const totalMonthlyBsott = serverTotal?.monthly_bsott ?? g.monthlyBsott
+            const totalMonthlyPresence = serverTotal?.monthly_presence ?? g.monthlyPresence
+            const bpjsTk = serverTotal?.bpjs_tk ?? g.bpjsTk
+            const bpjsKes = serverTotal?.bpjs_kes ?? g.bpjsKes
+
+            return (
+              <div key={g.key} className="space-y-3">
+                {g.items.map((r) => {
+                  const base = baseSalary(r)
+                  const ot = otTotal(r)
+                  const bsott = totalSalary(r)
+                  const prem = presenceDaily(r)
+                  return (
+                    <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
+                          <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
+                          <div className="text-base font-semibold truncate">{r.full_name}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs text-slate-500">Daily Total</div>
+                          <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
+                          <div className="text-xs text-slate-500 mt-1">OT Total</div>
+                          <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-lg bg-sky-50 px-2 py-2">In<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_in)}</span></div>
+                        <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
+                        <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{safeNum(r.real_work_hour)} h</span></div>
+                        <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{safeNum(r.overtime_hours)} h</span></div>
+                        <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
+                        <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(r.overtime_first_amount)} • {fmtIDR(r.overtime_second_amount)}</span></div>
+                        {/* ✅ Presence di kartu mobile */}
+                        <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
+                      </div>
+
+                      <div className="mt-3 text-[11px] text-slate-600">
+                        <div><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
+                        <div><b>Shift:</b> {r.shift_name ?? '-'}</div>
+                        <div><b>Gender:</b> {r.gender ?? '-'}</div>
+                        <div><b>Org:</b> {r.organization_name ?? '-'}</div>
+                        <div><b>Job:</b> {r.job_position ?? '-'} — {r.job_level ?? '-'}</div>
+                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
+                      </div>
+
+                      {/* Subtotal (ringkas) */}
+                      <div className="mt-3 text-[11px] text-emerald-800 border-t pt-2">
+                        <div><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></div>
+                        <div>OT: <b>{fmtIDR(totalMonthlyOT)}</b> • Daily Total: <b>{fmtIDR(totalMonthlyBsott)}</b></div>
+                        <div>BPJS TK: <b>{fmtIDR(bpjsTk)}</b> • BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
       </main>
     </div>
