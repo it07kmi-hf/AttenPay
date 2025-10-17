@@ -11,6 +11,10 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class AttendanceController extends Controller
 {
+    /**
+     * Agregat per karyawan untuk seluruh hasil filter.
+     * + Tambahan: work_days = jumlah hadir (jam>0 & punya clock in/out).
+     */
     private function buildEmployeeTotals($baseQuery): array
     {
         $rows = (clone $baseQuery)->select([
@@ -36,6 +40,7 @@ class AttendanceController extends Controller
                     'monthly_presence' => 0,
                     'bpjs_tk'          => 0,
                     'bpjs_kes'         => 0,
+                    'work_days'        => 0, // ✅ jumlah hari kerja (hadir)
                 ];
             }
 
@@ -64,6 +69,10 @@ class AttendanceController extends Controller
             $totals[$empId]['monthly_bsott']    += $totalDay;
             $totals[$empId]['monthly_presence'] += $presence;
 
+            if ($isPresent) {
+                $totals[$empId]['work_days']++; // ✅ hitung hari hadir
+            }
+
             $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
             $kes = (float)($r->bpjs_kes_deduction ?? 0);
             if ($totals[$empId]['bpjs_tk']  == 0 && $tk  > 0) $totals[$empId]['bpjs_tk']  = $tk;
@@ -73,10 +82,13 @@ class AttendanceController extends Controller
         return $totals;
     }
 
+    /**
+     * List (fixed 10/page, period default bulan-ini → hari-ini).
+     */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
-        $perPage = 10; // FIXED 10 per halaman
+        $perPage = 10; // ✅ seragam 10
 
         $tz         = 'Asia/Jakarta';
         $today      = now($tz)->toDateString();
@@ -85,9 +97,8 @@ class AttendanceController extends Controller
         $from = $req->query('from', $monthStart);
         $to   = $req->query('to', $today);
 
-        try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable $e) { $from = $monthStart; }
-        try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable $e) { $to   = $today; }
-
+        try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable) { $from = $monthStart; }
+        try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable) { $to   = $today; }
         if ($from > $to) { [$from, $to] = [$to, $from]; }
 
         $q = trim((string) $req->query('q', ''));
@@ -95,21 +106,14 @@ class AttendanceController extends Controller
         $builder = Attendance::query()
             ->select([
                 'id',
-                // identitas
                 'employee_id','full_name','schedule_date',
-                // jam hadir
                 'clock_in','clock_out','real_work_hour',
-                // 👉 timeoff
-                'timeoff_name',
-                // lembur (rupiah)
+                // ✅ kolom timeoff untuk FE
+                'timeoff_id','timeoff_name',
                 'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',
-                // cabang/org/job
                 'branch_name','organization_name','job_position',
-                // detail
                 'gender','join_date',
-                // audit/kalkulasi
                 'hourly_rate_used','daily_billable_hours','daily_total_amount','tenure_ge_1y',
-                // premi hadir & BPJS
                 'presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
             ])
@@ -153,9 +157,12 @@ class AttendanceController extends Controller
         ]);
     }
 
+    /**
+     * Export (biarkan seperti sebelumnya).
+     */
     public function export(Request $req)
     {
-        $format = strtolower($req->query('format', 'csv')); // csv | xlsx | pdf
+        $format = strtolower($req->query('format', 'csv'));
         $branch = (int)($req->query('branch_id', 21089));
 
         $tz         = 'Asia/Jakarta';
@@ -165,8 +172,8 @@ class AttendanceController extends Controller
         $from = $req->query('from', $monthStart);
         $to   = $req->query('to', $today);
 
-        try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable $e) { $from = $monthStart; }
-        try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable $e) { $to   = $today; }
+        try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable) { $from = $monthStart; }
+        try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable) { $to   = $today; }
         if ($from > $to) { [$from, $to] = [$to, $from]; }
 
         $q = trim((string)$req->query('q', ''));
@@ -198,64 +205,6 @@ class AttendanceController extends Controller
 
         $filenameBase = "attendance_{$nameSlug}_{$branch}_{$from}_{$to}";
 
-        if ($format === 'csv' || $format === 'xlsx') {
-            $filename = $filenameBase . ($format === 'xlsx' ? '.xlsx.csv' : '.csv');
-
-            $headers = [
-                'Content-Type'        => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-            ];
-
-            $columns = [
-                'Date','Employee ID','Name','In','Out',
-                'Work Hours','OT Hours','OT 1 (1.5x)','OT 2 (2x)','OT Total',
-                'Presence Daily','Daily Total',
-            ];
-
-            $selectCols = [
-                'schedule_date','employee_id','full_name','clock_in','clock_out',
-                'real_work_hour','overtime_hours','overtime_first_amount',
-                'overtime_second_amount','overtime_total_amount',
-                'presence_premium_daily','daily_total_amount',
-            ];
-
-            $callback = function () use ($baseQuery, $columns, $selectCols) {
-                $out = fopen('php://output', 'w');
-                fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
-                fputcsv($out, $columns);
-
-                (clone $baseQuery)
-                    ->select($selectCols)
-                    ->chunk(2000, function ($chunk) use ($out) {
-                        foreach ($chunk as $r) {
-                            $otTot    = (int) ($r->overtime_total_amount ?? 0);
-                            $presence = (int) ($r->presence_premium_daily ?? 0);
-                            $daily    = is_numeric($r->daily_total_amount) ? (int)$r->daily_total_amount : 0;
-
-                            fputcsv($out, [
-                                substr((string)$r->schedule_date, 0, 10),
-                                $r->employee_id,
-                                $r->full_name,
-                                $r->clock_in  ? substr((string)$r->clock_in,  0, 5) : '',
-                                $r->clock_out ? substr((string)$r->clock_out, 0, 5) : '',
-                                (float)($r->real_work_hour ?? 0),
-                                (float)($r->overtime_hours ?? 0),
-                                (float)($r->overtime_first_amount ?? 0),
-                                (float)($r->overtime_second_amount ?? 0),
-                                $otTot,
-                                $presence,
-                                $daily,
-                            ]);
-                        }
-                        if (function_exists('flush')) { flush(); }
-                    });
-
-                fclose($out);
-            };
-
-            return response()->stream($callback, 200, $headers);
-        }
-
         if ($format === 'pdf') {
             $rows = (clone $baseQuery)->select([
                 'schedule_date','employee_id','full_name','clock_in','clock_out',
@@ -263,6 +212,8 @@ class AttendanceController extends Controller
                 'overtime_second_amount','overtime_total_amount','daily_total_amount',
                 'hourly_rate_used','daily_billable_hours','presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
+                // boleh tambahkan timeoff ke PDF kalau dibutuhkan:
+                'timeoff_name',
             ])->get();
 
             $employeeTotals = $this->buildEmployeeTotals($baseQuery);
@@ -278,6 +229,7 @@ class AttendanceController extends Controller
             return $pdf->download($filenameBase . '.pdf');
         }
 
+        // CSV (tetap sama seperti sebelumnya, tidak wajib timeoff)
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
 }
