@@ -12,22 +12,89 @@ use Barryvdh\DomPDF\Facade\Pdf;
 class AttendanceController extends Controller
 {
     /**
-     * List data: default range = tanggal 1 bulan berjalan → hari ini (Asia/Jakarta).
-     * Catatan:
-     * - Select ikut sertakan kolom premi & BPJS agar bisa dipakai di FE.
-     * - Urutan dan filter diset agar pakai index.
+     * Rate fallback (sama seperti di FE).
+     */
+    private const FALLBACK_RATE = 28153;
+
+    /**
+     * Hitung agregat per karyawan untuk seluruh hasil filter (bukan per halaman).
+     * Return: array keyed by employee_id -> [
+     *   'employee_id','full_name','monthly_ot','monthly_bsott','monthly_presence','bpjs_tk','bpjs_kes'
+     * ]
+     */
+    private function buildEmployeeTotals($baseQuery): array
+    {
+        $rows = (clone $baseQuery)->select([
+            'employee_id','full_name',
+            'overtime_total_amount','presence_premium_daily','daily_total_amount',
+            'hourly_rate_used','daily_billable_hours','real_work_hour',
+            'bpjs_tk_deduction','bpjs_kes_deduction',
+        ])->orderBy('employee_id','asc')->get();
+
+        $totals = [];
+
+        foreach ($rows as $r) {
+            $empId = (string)($r->employee_id ?? '');
+            if ($empId === '') continue;
+
+            if (!isset($totals[$empId])) {
+                $totals[$empId] = [
+                    'employee_id'      => $empId,
+                    'full_name'        => (string)($r->full_name ?? ''),
+                    'monthly_ot'       => 0,
+                    'monthly_bsott'    => 0,
+                    'monthly_presence' => 0,
+                    'bpjs_tk'          => 0,
+                    'bpjs_kes'         => 0,
+                ];
+            }
+
+            // OT total
+            $otTot = (float)($r->overtime_total_amount ?? 0);
+
+            // Presence harian
+            $presence = (float)($r->presence_premium_daily ?? 0);
+
+            // Total harian (ikut logika FE)
+            $rate = is_numeric($r->hourly_rate_used) && $r->hourly_rate_used > 0
+                ? (float)$r->hourly_rate_used
+                : (float)self::FALLBACK_RATE;
+
+            $billable = !is_null($r->daily_billable_hours)
+                ? max(0, (float)$r->daily_billable_hours)
+                : min(7, max(0, (float)($r->real_work_hour ?? 0)));
+
+            $baseSalary = round($billable * $rate, 0);
+
+            $totalDay = is_null($r->daily_total_amount)
+                ? ($baseSalary + $otTot)
+                : (float)$r->daily_total_amount;
+
+            // Accumulate
+            $totals[$empId]['monthly_ot']       += $otTot;
+            $totals[$empId]['monthly_bsott']    += $totalDay;
+            $totals[$empId]['monthly_presence'] += $presence;
+
+            // BPJS: ambil nilai pertama non-zero (sesuai FE yang ambil yang ada)
+            $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
+            $kes = (float)($r->bpjs_kes_deduction ?? 0);
+            if ($totals[$empId]['bpjs_tk']  == 0 && $tk  > 0) $totals[$empId]['bpjs_tk']  = $tk;
+            if ($totals[$empId]['bpjs_kes'] == 0 && $kes > 0) $totals[$empId]['bpjs_kes'] = $kes;
+        }
+
+        return $totals; // keyed by employee_id
+    }
+
+    /**
+     * List data dengan pagination fixed 10 rows per halaman.
+     * Default range: tgl 1 bulan berjalan → hari ini (Asia/Jakarta).
      */
     public function index(Request $req)
     {
-        $branch = (int) $req->query('branch_id', 21089);
+        $branch  = (int) $req->query('branch_id', 21089);
 
-        // === per_page: default 10, batasi max 500
-        $perPage = (int) $req->query('per_page', 10);
-        $perPage = $perPage > 0 ? min($perPage, 500) : 10;
-
-        // Pastikan kita baca parameter page secara eksplisit
-        $page = (int) $req->query('page', 1);
-        if ($page < 1) $page = 1;
+        // ✅ Fixed per page 10
+        $perPage = 10;
 
         // Default: bulan ini sampai hari ini (Asia/Jakarta)
         $tz         = 'Asia/Jakarta';
@@ -41,7 +108,6 @@ class AttendanceController extends Controller
         try { $from = Carbon::parse($from, $tz)->toDateString(); } catch (\Throwable $e) { $from = $monthStart; }
         try { $to   = Carbon::parse($to,   $tz)->toDateString(); } catch (\Throwable $e) { $to   = $today; }
 
-        // Jika from > to, tukar biar aman
         if ($from > $to) { [$from, $to] = [$to, $from]; }
 
         $q = trim((string) $req->query('q', ''));
@@ -80,10 +146,20 @@ class AttendanceController extends Controller
             });
         }
 
-        // paginate (kunci per_page & page eksplisit)
-        $rows = $builder
-            ->paginate($perPage, ['*'], 'page', $page)
-            ->withQueryString();
+        // ✅ paginate fixed 10
+        $rows = $builder->paginate($perPage)->withQueryString();
+
+        // ✅ agregat per-karyawan untuk seluruh range (bukan per halaman)
+        $baseQueryForAgg = Attendance::query()
+            ->where('branch_id', $branch)
+            ->whereBetween('schedule_date', [$from, $to]);
+        if ($q !== '') {
+            $baseQueryForAgg->where(function ($w) use ($q) {
+                $w->where('employee_id', 'like', $q.'%')
+                  ->orWhere('full_name', 'like', $q.'%');
+            });
+        }
+        $employeeTotals = $this->buildEmployeeTotals($baseQueryForAgg);
 
         return Inertia::render('Attendance/Index', [
             'rows'    => $rows,
@@ -92,16 +168,15 @@ class AttendanceController extends Controller
                 'from'      => $from,
                 'to'        => $to,
                 'q'         => $q,
-                'per_page'  => $perPage, // kirim balik ke FE
+                'per_page'  => $perPage, // info untuk FE (tetap 10)
             ],
+            'employeeTotals' => $employeeTotals, // ✅ FE pakai ini untuk subtotal konsisten
+            'fallbackRate'   => self::FALLBACK_RATE,
         ]);
     }
 
     /**
      * Export CSV / Excel-compatible CSV / PDF.
-     * Catatan:
-     * - CSV: tetap ringan; sertakan Presence Daily supaya mudah rekap.
-     * - PDF: pakai view lama apa adanya (rows sudah membawa field extra).
      */
     public function export(Request $req)
     {
@@ -183,9 +258,9 @@ class AttendanceController extends Controller
                     ->select($selectCols)
                     ->chunk(2000, function ($chunk) use ($out) {
                         foreach ($chunk as $r) {
-                            $otTot   = (int) ($r->overtime_total_amount ?? 0);
-                            $presence= (int) ($r->presence_premium_daily ?? 0);
-                            $daily   = is_null($r->daily_total_amount) ? 0 : (int) $r->daily_total_amount;
+                            $otTot    = (int) ($r->overtime_total_amount ?? 0);
+                            $presence = (int) ($r->presence_premium_daily ?? 0);
+                            $daily    = is_null($r->daily_total_amount) ? 0 : (int) $r->daily_total_amount;
 
                             fputcsv($out, [
                                 substr((string)$r->schedule_date, 0, 10),
@@ -218,13 +293,19 @@ class AttendanceController extends Controller
                 'real_work_hour','overtime_hours','overtime_first_amount',
                 'overtime_second_amount','overtime_total_amount','daily_total_amount',
                 'hourly_rate_used','daily_billable_hours','presence_premium_daily',
+                'bpjs_tk_deduction','bpjs_kes_deduction',
             ])->get();
 
+            // ✅ Totals untuk dipakai di view PDF (konsisten dengan layar)
+            $employeeTotals = $this->buildEmployeeTotals($baseQuery);
+
             $pdf = Pdf::loadView('pdf.attendance', [
-                'rows'   => $rows,
-                'from'   => $from,
-                'to'     => $to,
-                'branch' => $branch,
+                'rows'            => $rows,
+                'from'            => $from,
+                'to'              => $to,
+                'branch'          => $branch,
+                'employeeTotals'  => $employeeTotals,
+                'fallbackRate'    => self::FALLBACK_RATE,
             ])->setPaper('a4', 'landscape');
 
             return $pdf->download($filenameBase . '.pdf');

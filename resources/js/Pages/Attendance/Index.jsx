@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
+// pakai path logo yang sama seperti di halaman login
 const LOGO_KMI = '/img/logo-kmi.png'
 
-export default function Index({ rows, filters }) {
+export default function Index({ rows, filters, employeeTotals = {}, fallbackRate = 28153 }) {
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  // === default 10 per halaman
-  const [perPage] = useState(filters.per_page || 10)
+  // ✅ fixed 10 per halaman (server juga 10)
+  const [perPage] = useState(10)
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
@@ -17,25 +18,25 @@ export default function Index({ rows, filters }) {
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // live search (debounce) -> reset ke page 1
+  // live search (debounce) untuk q
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
       setIsSearching(true)
-      router.get(
-        '/attendance',
-        { q, from, to, branch_id: branch, per_page: perPage, page: 1 },
+      router.get('/attendance',
+        { q, from, to, branch_id: branch, per_page: perPage },
         {
           preserveState: true,
           replace: true,
           preserveScroll: true,
-          only: ['rows', 'filters'],
-          onFinish: () => setIsSearching(false),
+          // ✅ pastikan totals juga ikut di-refresh
+          only: ['rows', 'filters', 'employeeTotals']
         }
       )
+      setIsSearching(false)
     }, searchDelayMs)
     return () => { if (_searchTimer.current) clearTimeout(_searchTimer.current) }
-  }, [q]) // pencarian live hanya untuk q
+  }, [q])
 
   const data = rows?.data ?? []
 
@@ -58,7 +59,7 @@ export default function Index({ rows, filters }) {
   const fmtDate = (v) => (v ? String(v).substring(0,10) : '-')
 
   // ===== Perhitungan (pakai nilai audit jika ada) =====
-  const FALLBACK_RATE = 28153
+  const FALLBACK_RATE = Number(fallbackRate || 28153)
   const hourlyRate = (r) => {
     const n = Number(r.hourly_rate_used)
     return Number.isFinite(n) && n > 0 ? n : FALLBACK_RATE
@@ -71,29 +72,26 @@ export default function Index({ rows, filters }) {
   }
   const baseSalary = (r) => Math.round(billableHours(r) * hourlyRate(r))
   const otTotal = (r) => safeNum(r.overtime_total_amount)
+
+  // ✅ tambahan: ambil premi hadir harian dari DB
   const presenceDaily = (r) => safeNum(r.presence_premium_daily)
+
   const totalSalary = (r) => {
     const d = r.daily_total_amount
     if (d !== undefined && d !== null && Number.isFinite(Number(d))) return Number(d)
     return baseSalary(r) + otTotal(r)
   }
 
-  // Search actions
+  // Actions: search & reset
   const search = (e) => {
     e.preventDefault()
-    router.get(
-      '/attendance',
-      { q, from, to, branch_id: branch, per_page: perPage, page: 1 },
-      { preserveState: true, replace: true, preserveScroll: true }
-    )
+    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage }, {
+      preserveState: true, replace: true, preserveScroll: true
+    })
   }
   const resetFilters = (e) => {
     e.preventDefault()
-    router.get(
-      '/attendance',
-      { q: '', from: filters.from, to: filters.to, branch_id: branch, per_page: perPage, page: 1 },
-      { replace: true, preserveScroll: true }
-    )
+    router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, { replace: true, preserveScroll: true })
   }
 
   // Export helper
@@ -101,21 +99,20 @@ export default function Index({ rows, filters }) {
     `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
 
   const confirmExport = async (fmt) => {
-    const nice = { csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }[fmt] || fmt.toUpperCase()
+    const nice = ({ csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }[fmt] || fmt.toUpperCase())
     try {
       const Swal = (await import('sweetalert2')).default
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
       const res = await Swal.fire({
         icon: 'question',
         title: 'Export confirmation',
-        html: `
-          <div style="text-align:left">
+        html:
+          `<div style="text-align:left">
             <div><b>Format:</b> ${nice}</div>
             <div><b>Rows:</b> ${totalRows.toLocaleString('en-US')}</div>
             <div><b>Period:</b> ${from} → ${to}</div>
             ${q ? `<div><b>Search:</b> ${q}</div>` : ''}
-          </div>
-        `,
+          </div>`,
         showCancelButton: true,
         confirmButtonText: 'Yes, export',
         cancelButtonText: 'Cancel',
@@ -125,6 +122,7 @@ export default function Index({ rows, filters }) {
       if (res.isConfirmed) window.location.href = exportUrl(fmt)
     } catch {
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
+      // eslint-disable-next-line no-alert
       if (window.confirm(`You’re about to export ${totalRows} row(s)\nfor Period ${from} → ${to}, as ${nice}.\nProceed?`)) {
         window.location.href = exportUrl(fmt)
       }
@@ -143,23 +141,25 @@ export default function Index({ rows, filters }) {
   }
   const pages = makePages(current, last)
   const goto = (page) => {
-    router.get(
-      '/attendance',
-      { q, from, to, branch_id: branch, per_page: perPage, page },
-      { preserveState: true, preserveScroll: true, replace: true }
-    )
+    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage, page }, {
+      preserveState: true, preserveScroll: true, replace: true
+    })
   }
 
-  // Group per employee (akumulasi OT, total harian, presence, simpan BPJS)
+  // ✅ Map totals dari server (key = employee_id)
+  const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
+
+  // Group per employee (untuk tampilan per halaman; subtotal diambil dari totalsMap supaya konsisten)
   const groups = useMemo(() => {
     const map = new Map(), order = []
-    data.forEach((r, idx) => {
+    ;(rows?.data ?? []).forEach((r, idx) => {
       const key = `${r.employee_id ?? ''}::${r.full_name ?? ''}`
       if (!map.has(key)) {
         map.set(key, {
           key, employee_id: r.employee_id, name: r.full_name, firstIndex: idx,
-          items: [], monthlyOt: 0, monthlyBsott: 0,
-          monthlyPresence: 0,
+          items: [],
+          // nilai berikut hanya fallback jika totalsMap tidak tersedia
+          monthlyOt: 0, monthlyBsott: 0, monthlyPresence: 0,
           bpjsTk: safeNum(r.bpjs_tk_deduction),
           bpjsKes: safeNum(r.bpjs_kes_deduction),
         })
@@ -174,7 +174,7 @@ export default function Index({ rows, filters }) {
       if (!g.bpjsKes) g.bpjsKes = safeNum(r.bpjs_kes_deduction)
     })
     return order.map(k => map.get(k))
-  }, [data])
+  }, [rows])
 
   return (
     <div
@@ -420,89 +420,112 @@ export default function Index({ rows, filters }) {
                 <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={30}>No data</td></tr>
               )}
 
-              {groups.map((g) => (
-                <React.Fragment key={g.key}>
-                  {g.items.map((r) => {
-                    const base = baseSalary(r)
-                    const ot   = otTotal(r)
-                    const prem = presenceDaily(r)
-                    const totalDay = totalSalary(r)
-                    return (
-                      <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                        {/* Identitas / Absensi utama */}
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.user_id ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
+              {useMemo(() => {
+                const map = new Map(), order = []
+                data.forEach((r, idx) => {
+                  const key = `${r.employee_id ?? ''}::${r.full_name ?? ''}`
+                  if (!map.has(key)) {
+                    map.set(key, {
+                      key, employee_id: r.employee_id, name: r.full_name, firstIndex: idx,
+                      items: [],
+                    })
+                    order.push(key)
+                  }
+                  map.get(key).items.push(r)
+                })
+                return order.map(k => map.get(k))
+              }, [data]).map((g) => {
+                const serverTotal = (employeeTotals || {})?.[g.employee_id] || null
+                const totalMonthlyOT = serverTotal?.monthly_ot ?? 0
+                const totalMonthlyBsott = serverTotal?.monthly_bsott ?? 0
+                const totalMonthlyPresence = serverTotal?.monthly_presence ?? 0
+                const bpjsTk = serverTotal?.bpjs_tk ?? 0
+                const bpjsKes = serverTotal?.bpjs_kes ?? 0
 
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
-                            {safeNum(r.real_work_hour)} h
-                          </span>
-                        </td>
+                return (
+                  <React.Fragment key={g.key}>
+                    {g.items.map((r) => {
+                      const base = baseSalary(r)
+                      const ot   = otTotal(r)
+                      const prem = presenceDaily(r)
+                      const totalDay = totalSalary(r)
+                      return (
+                        <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
+                          {/* Identitas / Absensi utama */}
+                          <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.user_id ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
 
-                        {/* Lembur (Rp) */}
-                        <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{safeNum(r.overtime_hours)} h</span></td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
-                        <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
-                        {/* Presence harian */}
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
+                              {safeNum(r.real_work_hour)} h
+                            </span>
+                          </td>
 
-                        {/* Shift / Absensi metadata */}
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.branch_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.branch_name ?? '-'}</div></td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.shift_name ?? '-'}</div></td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.attendance_code ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.holiday, 'Yes', 'No')}</td>
+                          {/* Lembur (Rp) */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{safeNum(r.overtime_hours)} h</span></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
+                          <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
+                          {/* ✅ Presence harian */}
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
 
-                        {/* Employee detail */}
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.organization_id ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_position_id ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_level_id ?? '-'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_level ?? '-'}</div></td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
+                          {/* Shift / Absensi metadata */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.branch_id}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.branch_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.shift_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.attendance_code ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.holiday, 'Yes', 'No')}</td>
 
-                        {/* Audit / Kalkulasi harian tersimpan */}
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(base)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-bold">{fmtIDR(totalDay)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.tenure_ge_1y, 'Yes', 'No')}</td>
-                      </tr>
-                    )
-                  })}
+                          {/* Employee detail */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.organization_id ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_position_id ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_level_id ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_level ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
 
-                  {/* Subtotal per employee (ASLI — tetap, tidak dihapus) */}
-                  <tr className="bg-amber-50/60">
-                    <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={22}>
-                      Grand Total ({g.name})
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
-                      OT: {fmtIDR(g.monthlyOt)}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
-                      Daily Total: {fmtIDR(g.monthlyBsott)}
-                    </td>
-                  </tr>
+                          {/* Audit / Kalkulasi harian tersimpan */}
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(base)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-bold">{fmtIDR(totalDay)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.tenure_ge_1y, 'Yes', 'No')}</td>
+                        </tr>
+                      )
+                    })}
 
-                  {/* Subtotal TAMBAHAN untuk Presence & BPJS (baris baru) */}
-                  <tr className="bg-emerald-50/50">
-                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={30}>
-                      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
-                        <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(g.monthlyPresence)}</b></span>
-                        <span>BPJS TK: <b>{fmtIDR(g.bpjsTk)}</b></span>
-                        <span>BPJS Kesehatan: <b>{fmtIDR(g.bpjsKes)}</b></span>
-                      </div>
-                    </td>
-                  </tr>
-                </React.Fragment>
-              ))}
+                    {/* Subtotal per employee (tetap tampil sama di setiap halaman) */}
+                    <tr className="bg-amber-50/60">
+                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={22}>
+                        Grand Total ({g.name})
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                        OT: {fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_ot ?? 0)}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                        Daily Total: {fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_bsott ?? 0)}
+                      </td>
+                    </tr>
+
+                    {/* Presence & BPJS (pakai angka server) */}
+                    <tr className="bg-emerald-50/50">
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={30}>
+                        <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
+                          <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.monthly_presence ?? 0)}</b></span>
+                          <span>BPJS TK: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.bpjs_tk ?? 0)}</b></span>
+                          <span>BPJS Kesehatan: <b>{fmtIDR((employeeTotals || {})?.[g.employee_id]?.bpjs_kes ?? 0)}</b></span>
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -512,63 +535,20 @@ export default function Index({ rows, filters }) {
           <div>Total: {total}</div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => goto(Math.max(1, current - 1))} disabled={current === 1} className={`px-3 py-1 rounded border ${current === 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Prev</button>
-            {pages.map((p, i) =>
+            {(() => {
+              const max = last
+              const cur = current
+              if (max <= 7) return Array.from({ length: max }, (_, i) => i + 1)
+              if (cur <= 4) return [1, 2, 3, 4, '…', max]
+              if (cur >= max - 3) return [1, '…', max - 3, max - 2, max - 1, max]
+              return [1, '…', cur - 1, cur, cur + 1, '…', max]
+            })().map((p, i) =>
               p === '…' ? <span key={`e-${i}`} className="px-2 text-slate-500 select-none">…</span> : (
                 <button key={p} onClick={() => goto(p)} className={`px-3 py-1 rounded border ${p === current ? 'bg-sky-600 text-white border-sky-600' : 'bg-white hover:bg-slate-50'}`}>{p}</button>
               )
             )}
             <button onClick={() => goto(Math.min(last, current + 1))} disabled={current === last} className={`px-3 py-1 rounded border ${current === last ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Next</button>
           </div>
-        </div>
-
-        {/* Cards (Mobile) */}
-        <div className="md:hidden space-y-3">
-          {groups.map((g) => (
-            <div key={g.key} className="space-y-3">
-              {g.items.map((r) => {
-                const base = baseSalary(r)
-                const ot = otTotal(r)
-                const bsott = totalSalary(r)
-                const prem = presenceDaily(r)
-                return (
-                  <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
-                        <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
-                        <div className="text-base font-semibold truncate">{r.full_name}</div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-xs text-slate-500">Daily Total</div>
-                        <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
-                        <div className="text-xs text-slate-500 mt-1">OT Total</div>
-                        <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-lg bg-sky-50 px-2 py-2">In<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_in)}</span></div>
-                      <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
-                      <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{safeNum(r.real_work_hour)} h</span></div>
-                      <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{safeNum(r.overtime_hours)} h</span></div>
-                      <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
-                      <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(r.overtime_first_amount)} • {fmtIDR(r.overtime_second_amount)}</span></div>
-                      <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
-                    </div>
-
-                    <div className="mt-3 text-[11px] text-slate-600">
-                      <div><b>Branch:</b> {r.branch_name ?? '-'}</div>
-                      <div><b>Shift:</b> {r.shift_name ?? '-'}</div>
-                      <div><b>Gender:</b> {r.gender ?? '-'}</div>
-                      <div><b>Org:</b> {r.organization_name ?? '-'}</div>
-                      <div><b>Job:</b> {r.job_position ?? '-'} — {r.job_level ?? '-'}</div>
-                      <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
         </div>
       </main>
     </div>
