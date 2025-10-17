@@ -49,13 +49,9 @@ class AttendanceController extends Controller
                 ];
             }
 
-            // OT total
             $otTot = (float)($r->overtime_total_amount ?? 0);
-
-            // Presence harian
             $presence = (float)($r->presence_premium_daily ?? 0);
 
-            // Total harian (ikut logika FE)
             $rate = is_numeric($r->hourly_rate_used) && $r->hourly_rate_used > 0
                 ? (float)$r->hourly_rate_used
                 : (float)self::FALLBACK_RATE;
@@ -70,12 +66,11 @@ class AttendanceController extends Controller
                 ? ($baseSalary + $otTot)
                 : (float)$r->daily_total_amount;
 
-            // Accumulate
             $totals[$empId]['monthly_ot']       += $otTot;
             $totals[$empId]['monthly_bsott']    += $totalDay;
             $totals[$empId]['monthly_presence'] += $presence;
 
-            // BPJS: ambil nilai pertama non-zero (sesuai FE yang ambil yang ada)
+            // BPJS: ambil nilai pertama non-zero
             $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
             $kes = (float)($r->bpjs_kes_deduction ?? 0);
             if ($totals[$empId]['bpjs_tk']  == 0 && $tk  > 0) $totals[$empId]['bpjs_tk']  = $tk;
@@ -112,25 +107,24 @@ class AttendanceController extends Controller
 
         $q = trim((string) $req->query('q', ''));
 
-        // SELECT kolom yang dipakai di Index.jsx (+ kolom premi hadir & BPJS)
+        // SELECT hanya kolom yang dipakai FE (User ID sudah TIDAK dipanggil)
         $builder = Attendance::query()
             ->select([
                 'id',
                 // identitas
-                'user_id','employee_id','full_name','schedule_date',
+                'employee_id','full_name','schedule_date',
                 // jam hadir
                 'clock_in','clock_out','real_work_hour',
                 // lembur (rupiah)
                 'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',
-                // shift / cabang
-                'branch_id','branch_name','shift_name','attendance_code','holiday',
-                // employee detail
-                'gender','organization_id','organization_name','job_position_id','job_position',
-                'job_level_id','job_level','join_date',
-                // audit/kalkulasi
+                // cabang/nama perusahaan
+                'branch_name',
+                // employee detail yang ditampilkan
+                'gender','organization_name','job_position','join_date',
+                // audit/kalkulasi yang ditampilkan
                 'hourly_rate_used','daily_billable_hours','daily_total_amount','tenure_ge_1y',
-                // premi hadir & BPJS (BARU)
-                'presence_premium_monthly_base','presence_premium_daily',
+                // premi hadir & BPJS yang ditampilkan
+                'presence_premium_daily',
                 'bpjs_tk_deduction','bpjs_kes_deduction',
             ])
             ->where('branch_id', $branch)
@@ -288,6 +282,7 @@ class AttendanceController extends Controller
 
         // ===== PDF =====
         if ($format === 'pdf') {
+            // Hanya kolom yang dipakai di view PDF
             $rows = (clone $baseQuery)->select([
                 'schedule_date','employee_id','full_name','clock_in','clock_out',
                 'real_work_hour','overtime_hours','overtime_first_amount',

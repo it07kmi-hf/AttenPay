@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
-// pakai path logo yang sama seperti di halaman login
 const LOGO_KMI = '/img/logo-kmi.png'
 
 export default function Index({ rows, filters, employeeTotals = {}, fallbackRate = 28153 }) {
@@ -9,8 +8,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  // ✅ fixed 10 per halaman (server juga 10)
-  const [perPage] = useState(10)
+  const [perPage] = useState(10) // fixed 10
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
@@ -18,7 +16,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // live search (debounce) untuk q
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
@@ -29,7 +26,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           preserveState: true,
           replace: true,
           preserveScroll: true,
-          // ✅ pastikan totals juga ikut di-refresh
           only: ['rows', 'filters', 'employeeTotals']
         }
       )
@@ -40,7 +36,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
   const data = rows?.data ?? []
 
-  // ===== Helpers formatting =====
+  // ===== Helpers =====
   const fmtTime = (val) => {
     if (!val) return '-'
     const m = String(val).match(/\b(\d{2}:\d{2})/)
@@ -58,13 +54,13 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   )
   const fmtDate = (v) => (v ? String(v).substring(0,10) : '-')
 
-  // 🚿 Bersihkan branch name → ambil bagian sebelum " – ..."/" — ..."/"- ..."
+  // Bersihkan branch name → ambil bagian sebelum " – ..."/" — ..."/"- ..."
   const cleanBranchName = (name) => {
     if (!name) return '-'
     return String(name).split(/\s[–—-]\s/)[0]
   }
 
-  // ===== Perhitungan (pakai nilai audit jika ada) =====
+  // ===== Perhitungan =====
   const FALLBACK_RATE = Number(fallbackRate || 28153)
   const hourlyRate = (r) => {
     const n = Number(r.hourly_rate_used)
@@ -78,17 +74,14 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   }
   const baseSalary = (r) => Math.round(billableHours(r) * hourlyRate(r))
   const otTotal = (r) => safeNum(r.overtime_total_amount)
-
-  // ✅ tambahan: ambil premi hadir harian dari DB
   const presenceDaily = (r) => safeNum(r.presence_premium_daily)
-
   const totalSalary = (r) => {
     const d = r.daily_total_amount
     if (d !== undefined && d !== null && Number.isFinite(Number(d))) return Number(d)
     return baseSalary(r) + otTotal(r)
   }
 
-  // Actions: search & reset
+  // Actions
   const search = (e) => {
     e.preventDefault()
     router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage }, {
@@ -100,10 +93,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
     router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, { replace: true, preserveScroll: true })
   }
 
-  // Export helper
+  // Export
   const exportUrl = (fmt) =>
     `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
-
   const confirmExport = async (fmt) => {
     const nice = ({ csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }[fmt] || fmt.toUpperCase())
     try {
@@ -128,7 +120,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
       if (res.isConfirmed) window.location.href = exportUrl(fmt)
     } catch {
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
-      // eslint-disable-next-line no-alert
       if (window.confirm(`You’re about to export ${totalRows} row(s)\nfor Period ${from} → ${to}, as ${nice}.\nProceed?`)) {
         window.location.href = exportUrl(fmt)
       }
@@ -152,10 +143,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
     })
   }
 
-  // ✅ Map totals dari server (key = employee_id)
+  // Totals map
   const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
 
-  // Group per employee (untuk tampilan per halaman; subtotal diambil dari totalsMap supaya konsisten)
+  // Group per employee
   const groups = useMemo(() => {
     const map = new Map(), order = []
     data.forEach((r, idx) => {
@@ -164,7 +155,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
         map.set(key, {
           key, employee_id: r.employee_id, name: r.full_name, firstIndex: idx,
           items: [],
-          // nilai berikut hanya fallback jika totalsMap tidak tersedia
           monthlyOt: 0, monthlyBsott: 0, monthlyPresence: 0,
           bpjsTk: safeNum(r.bpjs_tk_deduction),
           bpjsKes: safeNum(r.bpjs_kes_deduction),
@@ -183,35 +173,24 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   }, [data])
 
   return (
-    <div
-      className="min-h-dvh bg-slate-50"
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
-      }}
-    >
+    <div className="min-h-dvh bg-slate-50" style={{
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
+    }}>
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
-          {/* === LOGO + TITLE === */}
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
-              <img
-                src={LOGO_KMI}
-                alt="KMI Logo"
-                className="h-full w-full object-contain"
-                loading="eager"
-                decoding="async"
-                onError={(e) => (e.currentTarget.style.display = 'none')}
-              />
+              <img src={LOGO_KMI} alt="KMI Logo" className="h-full w-full object-contain"
+                   loading="eager" decoding="async"
+                   onError={(e) => (e.currentTarget.style.display = 'none')} />
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll System</h1>
-              <p className="text-xs sm:text-sm opacity-90 truncate">
-                <b>PT Kayu Mebel Indonesia (KMI)</b>
-              </p>
+              <p className="text-xs sm:text-sm opacity-90 truncate"><b>PT Kayu Mebel Indonesia (KMI)</b></p>
             </div>
           </div>
 
@@ -223,23 +202,11 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
               <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
-            {/* Logout */}
-            <Link
-              href="/logout"
-              method="post"
-              as="button"
-              aria-label="Logout"
-              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
-              title="Logout"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors"
-              >
+            <Link href="/logout" method="post" as="button" aria-label="Logout"
+                  className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" strokeWidth="1.8"
+                   className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors">
                 <path strokeLinecap="round" strokeLinejoin="round"
                   d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round"
@@ -262,15 +229,8 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
               )}
             </div>
 
-            {/* Logout icon mobile */}
-            <Link
-              href="/logout"
-              method="post"
-              as="button"
-              aria-label="Logout"
-              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
-              title="Logout"
-            >
+            <Link href="/logout" method="post" as="button" aria-label="Logout"
+                  className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                    fill="none" stroke="currentColor" strokeWidth="1.8"
                    className="h-5 w-5 text-red-400 hover:text-red-500">
@@ -287,10 +247,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
       {/* Period badge */}
       <div className="bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-          <div
-            className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60"
-            aria-label="Selected period"
-          >
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60" aria-label="Selected period">
             <span className="font-medium">Period:</span>
             <span className="font-semibold">{from}</span>
             <span>→</span>
@@ -306,21 +263,11 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div className="md:col-span-2">
               <label className="text-sm">From</label>
-              <input
-                type="date"
-                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
-                value={from}
-                onChange={e => setFrom(e.target.value)}
-              />
+              <input type="date" className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300" value={from} onChange={e => setFrom(e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className="text-sm">To</label>
-              <input
-                type="date"
-                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
-                value={to}
-                onChange={e => setTo(e.target.value)}
-              />
+              <input type="date" className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300" value={to} onChange={e => setTo(e.target.value)} />
             </div>
             <div className="md:col-span-1 flex gap-2">
               <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm border border-sky-700">Apply</button>
@@ -339,53 +286,51 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           </div>
         </form>
 
-        {/* TABLE — kolom terpisah */}
+        {/* TABLE — User ID dihapus, Join Date setelah Gender */}
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
-          <table className="min-w-[2200px] text-xs md:text-sm table-fixed">
+          <table className="min-w-[2100px] text-xs md:text-sm table-fixed">
             <colgroup>
-              {/* 1-4: Identitas utama */}
+              {/* 1-3: Identitas */}
               <col className="w-[7rem]" />   {/* Date */}
-              <col className="w-[7rem]" />   {/* User ID */}
               <col className="w-[7rem]" />   {/* Employee ID */}
               <col className="w-[12rem]" />  {/* Name */}
-              {/* 5-9: Meta diminta user */}
+              {/* 4-8: Meta (Join Date tepat setelah Gender) */}
               <col className="w-[6rem]" />   {/* Gender */}
+              <col className="w-[8rem]" />   {/* Join Date */}
               <col className="w-[14rem]" />  {/* Branch Name */}
               <col className="w-[14rem]" />  {/* Organization */}
               <col className="w-[12rem]" />  {/* Job Position */}
-              <col className="w-[8rem]" />   {/* Join Date */}
-              {/* 10-12: Absensi */}
+              {/* 9-11: Absensi */}
               <col className="w-[6rem]" />   {/* In */}
               <col className="w-[6rem]" />   {/* Out */}
               <col className="w-[7rem]" />   {/* Work Hours */}
-              {/* 13-16: Lembur */}
+              {/* 12-15: Lembur */}
               <col className="w-[6.5rem]" /> {/* OT Hours */}
               <col className="w-[8rem]" />   {/* OT 1 */}
               <col className="w-[8rem]" />   {/* OT 2 */}
               <col className="w-[8rem]" />   {/* OT Total */}
-              {/* 17: Presence */}
+              {/* 16: Presence */}
               <col className="w-[8rem]" />   {/* Presence Daily */}
-              {/* 18-21: Audit/kalkulasi */}
+              {/* 17-20: Audit/kalkulasi */}
               <col className="w-[8rem]" />   {/* Hourly Rate */}
               <col className="w-[6.5rem]" /> {/* Billable H */}
               <col className="w-[9rem]" />   {/* Basic Salary */}
               <col className="w-[9rem]" />   {/* Daily Total */}
-              {/* 22: Tenure */}
+              {/* 21: Tenure */}
               <col className="w-[7rem]" />   {/* Tenure ≥1y */}
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
               <tr>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Date</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">User ID</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Employee ID</th>
                 <th className="px-3 py-3 font-semibold text-sky-900">Name</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Gender</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
                 <th className="px-3 py-3 font-semibold text-sky-900">Branch Name</th>
                 <th className="px-3 py-3 font-semibold text-sky-900">Organization</th>
                 <th className="px-3 py-3 font-semibold text-sky-900">Job Position</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
@@ -407,11 +352,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={22}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={21}>No data</td></tr>
               )}
 
               {groups.map((g) => {
-                // ✅ ambil subtotal dari server agar konsisten di halaman berapa pun
                 const serverTotal = totalsMap?.[g.employee_id] || null
                 const totalMonthlyOT = serverTotal?.monthly_ot ?? g.monthlyOt
                 const totalMonthlyBsott = serverTotal?.monthly_bsott ?? g.monthlyBsott
@@ -428,18 +372,17 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                       const totalDay = totalSalary(r)
                       return (
                         <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                          {/* Identitas / Absensi utama */}
+                          {/* Identitas */}
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.user_id ?? '-'}</td>
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
 
-                          {/* Kolom baru (terpisah) */}
+                          {/* Meta (Gender → Join Date → Branch → Org → Job) */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{cleanBranchName(r.branch_name)}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
 
                           {/* Absensi */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
@@ -450,13 +393,13 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                             </span>
                           </td>
 
-                          {/* Lembur (Rp) */}
+                          {/* Lembur */}
                           <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{safeNum(r.overtime_hours)} h</span></td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
                           <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
 
-                          {/* Presence & audit */}
+                          {/* Presence & kalkulasi */}
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
@@ -467,10 +410,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                       )
                     })}
 
-                    {/* Subtotal per employee (tetap tampil sama di setiap halaman) */}
+                    {/* Subtotal per employee */}
                     <tr className="bg-amber-50/60">
-                      {/* total 22 kolom → 16 + 3 + 3 */}
-                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={16}>
+                      {/* total 21 kolom → 15 + 3 + 3 */}
+                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={15}>
                         Grand Total ({g.name})
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
@@ -481,9 +424,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                       </td>
                     </tr>
 
-                    {/* Presence & BPJS (pakai angka server) */}
+                    {/* Presence & BPJS */}
                     <tr className="bg-emerald-50/50">
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={22}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={21}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
                           <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
                           <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
@@ -512,7 +455,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           </div>
         </div>
 
-        {/* Cards (Mobile) */}
+        {/* Cards (Mobile) — urutan meta juga Gender → Join Date → Branch → Org → Job */}
         <div className="md:hidden space-y-3">
           {groups.map((g) => {
             const serverTotal = totalsMap?.[g.employee_id] || null
@@ -537,10 +480,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
                       <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-700">
                         <div><b>Gender:</b> {r.gender ?? '-'}</div>
-                        <div><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
+                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
+                        <div className="col-span-2"><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
                         <div className="col-span-2"><b>Organization:</b> {r.organization_name ?? '-'}</div>
                         <div className="col-span-2"><b>Job Position:</b> {r.job_position ?? '-'}</div>
-                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -550,7 +493,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                         <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{safeNum(r.overtime_hours)} h</span></div>
                         <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
                         <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(r.overtime_first_amount)} • {fmtIDR(r.overtime_second_amount)}</span></div>
-                        {/* ✅ Presence di kartu mobile */}
                         <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
                       </div>
 
