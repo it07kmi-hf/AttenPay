@@ -1,19 +1,16 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
-// Use the same logo path as login page
 const LOGO_KMI = '/img/logo-kmi.png'
-
-// ✅ Fixed per page (10) — consistent on all envs
 const PER_PAGE = 10
 
 export default function Index({ rows, filters, employeeTotals = {}, orgOptions = [] }) {
-  // === Filters state ===
+  // filters state
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  const [orgId, setOrgId] = useState(filters.org_id ?? '') // NEW: org filter ('' = all)
+  const [orgId, setOrgId] = useState(String(filters.organization_id || '')) // organization filter
   const [perPage] = useState(PER_PAGE)
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
@@ -22,23 +19,23 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // Debounced live search on q/orgId
+  // live search debounce (q only)
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
       setIsSearching(true)
       router.get('/attendance',
-        { q, from, to, branch_id: branch, per_page: perPage, org_id: orgId ?? '' },
-        { preserveState: true, replace: true, preserveScroll: true, only: ['rows','filters','employeeTotals','orgOptions'] }
+        { q, from, to, branch_id: branch, per_page: perPage, organization_id: orgId || '' },
+        { preserveState: true, replace: true, preserveScroll: true, only: ['rows','filters','employeeTotals'] }
       )
       setIsSearching(false)
     }, searchDelayMs)
     return () => { if (_searchTimer.current) clearTimeout(_searchTimer.current) }
-  }, [q, orgId]) // watch orgId too
+  }, [q])
 
   const data = rows?.data ?? []
 
-  // ===== Helpers =====
+  // format helpers
   const fmtTime = (val) => {
     if (!val) return '-'
     const m = String(val).match(/\b(\d{2}:\d{2})/)
@@ -60,11 +57,11 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
     return String(name).split(/\s[–—-]\s/)[0]
   }
 
-  // ===== Presence =====
+  // presence logic
   const isPresent = (r) =>
     !!(r.clock_in && r.clock_out && Number(r.real_work_hour) > 0)
 
-  // ===== Calculations (0 if not present) =====
+  // calculations (0 if not present)
   const hourlyRate = (r) => isPresent(r) ? safeNum(r.hourly_rate_used) : 0
   const billableHours = (r) => {
     if (!isPresent(r)) return 0
@@ -84,35 +81,32 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
 
   const totalSalary = (r) => {
     if (r.daily_total_amount !== undefined && r.daily_total_amount !== null && Number.isFinite(Number(r.daily_total_amount))) {
-      return Number(r.daily_total_amount) // 0 should be shown as Rp 0
+      return Number(r.daily_total_amount)
     }
-    // legacy fallback:
     return isPresent(r) ? (baseSalary(r) + otTotal(r)) : 0
   }
 
-  // Search actions
+  // search actions
   const search = (e) => {
     e.preventDefault()
-    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage, org_id: orgId ?? '' }, {
+    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage, organization_id: orgId || '' }, {
       preserveState: true, replace: true, preserveScroll: true
     })
   }
   const resetFilters = (e) => {
     e.preventDefault()
-    setQ('')
     setOrgId('')
-    router.get('/attendance', { q: '', branch_id: branch, per_page: perPage, org_id: '' }, { replace: true, preserveScroll: true })
+    router.get('/attendance', { q: '', branch_id: branch, per_page: perPage, organization_id: '' }, { replace: true, preserveScroll: true })
   }
 
-  // Export helper (include org_id)
+  // export
   const exportUrl = (fmt) =>
-    `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}&org_id=${encodeURIComponent(orgId ?? '')}`
+    `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}&organization_id=${encodeURIComponent(orgId || '')}`
   const confirmExport = async (fmt) => {
     const nice = { csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }[fmt] || fmt.toUpperCase()
     try {
       const Swal = (await import('sweetalert2')).default
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
-      const chosenOrg = orgOptions.find(o => String(o.id ?? '') === String(orgId ?? ''))?.name || 'All'
       const res = await Swal.fire({
         icon: 'question',
         title: 'Export confirmation',
@@ -122,7 +116,6 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
             <div><b>Rows:</b> ${totalRows.toLocaleString('en-US')}</div>
             <div><b>Period:</b> ${from} → ${to}</div>
             ${q ? `<div><b>Search:</b> ${q}</div>` : ''}
-            <div><b>Organization:</b> ${chosenOrg}</div>
           </div>
         `,
         showCancelButton: true,
@@ -134,13 +127,13 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
       if (res.isConfirmed) window.location.href = exportUrl(fmt)
     } catch {
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
-      if (window.confirm(`You’re about to export ${totalRows} row(s)\nPeriod ${from} → ${to}\nOrganization: ${orgId || 'All'}\nFormat: ${nice}\nProceed?`)) {
+      if (window.confirm(`You’re about to export ${totalRows} row(s)\nfor Period ${from} → ${to}, as ${nice}.\nProceed?`)) {
         window.location.href = exportUrl(fmt)
       }
     }
   }
 
-  // Pagination
+  // pagination
   const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
   const last    = rows?.last_page    ?? rows?.meta?.last_page    ?? 1
   const total   = rows?.total        ?? rows?.meta?.total        ?? 0
@@ -152,15 +145,12 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
   }
   const pages = makePages(current, last)
   const goto = (page) => {
-    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage, page, org_id: orgId ?? '' }, {
+    router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage, page, organization_id: orgId || '' }, {
       preserveState: true, preserveScroll: true, replace: true
     })
   }
 
-  // Totals map
-  const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
-
-  // Group per employee for subtotals (unchanged)
+  // group per employee
   const groups = useMemo(() => {
     const map = new Map(), order = []
     data.forEach((r, idx) => {
@@ -199,7 +189,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
-          {/* Logo + Title */}
+          {/* logo + title */}
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
               <img
@@ -219,21 +209,21 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
             </div>
           </div>
 
-          {/* Desktop actions */}
+          {/* desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="flex overflow-hidden rounded-lg border border-white/30">
-              <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
-              <button onClick={() => confirmExport('xlsx')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">Excel</button>
-              <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
+              <button onClick={() => confirmExport('csv')} className="px-2 py-1 text-xs bg-white/15 hover:bg-white/25">CSV</button>
+              <button onClick={() => confirmExport('xlsx')} className="px-2 py-1 text-xs bg-white/15 hover:bg-white/25 border-l border-white/30">Excel</button>
+              <button onClick={() => confirmExport('pdf')} className="px-2 py-1 text-xs bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
-            {/* Logout */}
+            {/* logout */}
             <Link
               href="/logout"
               method="post"
               as="button"
               aria-label="Logout"
-              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
+              className="p-1.5 rounded-md border border-white/40 bg-white/10 hover:bg-white/20"
               title="Logout"
             >
               <svg
@@ -252,11 +242,11 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
             </Link>
           </div>
 
-          {/* Mobile actions */}
+          {/* mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
-            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
+            <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2 py-1 text-xs bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
             <div className="relative">
-              <button onClick={() => setMobileExportOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Export</button>
+              <button onClick={() => setMobileExportOpen(v => !v)} className="px-2 py-1 text-xs bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Export</button>
               {mobileExportOpen && (
                 <div className="absolute right-0 mt-2 w-40 rounded-lg overflow-hidden border border-white/40 bg-white/90 text-slate-800 shadow-lg backdrop-blur">
                   <button onClick={() => { setMobileExportOpen(false); confirmExport('csv') }} className="block w-full text-left px-3 py-2 hover:bg-slate-100">CSV</button>
@@ -266,7 +256,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
               )}
             </div>
 
-            {/* Logout icon mobile */}
+            {/* logout icon mobile */}
             <Link
               href="/logout"
               method="post"
@@ -292,7 +282,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
       <div className="bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
           <div
-            className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60"
+            className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-2.5 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60"
             aria-label="Selected period"
           >
             <span className="font-medium">Period:</span>
@@ -306,65 +296,67 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-5 space-y-6">
         {/* Filters (Desktop) */}
-        <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-200 p-3 md:p-4">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-            <div className="md:col-span-2">
-              <label className="text-sm">From</label>
+        <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-200 p-3">
+          {/* Row 1: From | To | Organization | Apply/Reset */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+            <div className="md:col-span-3">
+              <label className="text-xs">From</label>
               <input
                 type="date"
-                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                className="h-8 w-full border border-slate-300 rounded-md px-2 py-1 text-xs outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
                 value={from}
                 onChange={e => setFrom(e.target.value)}
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="text-sm">To</label>
+
+            <div className="md:col-span-3">
+              <label className="text-xs">To</label>
               <input
                 type="date"
-                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                className="h-8 w-full border border-slate-300 rounded-md px-2 py-1 text-xs outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
                 value={to}
                 onChange={e => setTo(e.target.value)}
               />
             </div>
 
-            {/* NEW: Organization filter */}
-            <div className="md:col-span-1">
-              <label className="text-sm">Organization</label>
+            <div className="md:col-span-4">
+              <label className="text-xs">Organization</label>
               <select
-                className="w-full border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
-                value={orgId ?? ''}
+                className="h-8 w-full border border-slate-300 rounded-md px-2 py-1 text-xs outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+                value={orgId}
                 onChange={(e) => setOrgId(e.target.value)}
               >
-                <option value="">All</option>
+                <option value="">All Organizations</option>
                 {orgOptions.map(opt => (
-                  <option key={`${opt.id ?? 'null'}`} value={opt.id ?? ''}>
-                    {opt.name}
+                  <option key={opt.id} value={String(opt.id)}>
+                    {opt.name || `(ID ${opt.id})`}
                   </option>
                 ))}
               </select>
             </div>
 
-            <div className="md:col-span-1 flex gap-2">
-              <button type="submit" className="w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md py-1.5 text-sm border border-sky-700">Apply</button>
-              <button onClick={resetFilters} className="w-full border border-slate-300 rounded-md py-1.5 text-sm hover:bg-slate-50">Reset</button>
+            <div className="md:col-span-2 flex gap-2">
+              <button type="submit" className="h-8 w-full bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs border border-sky-700">Apply</button>
+              <button onClick={resetFilters} className="h-8 w-full border border-slate-300 rounded-md text-xs hover:bg-slate-50">Reset</button>
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-3">
+          {/* Row 2: Search */}
+          <div className="mt-2 flex items-center gap-2">
             <input
               placeholder="Search name / ID"
-              className="flex-1 border border-slate-300 rounded-md px-3 py-1.5 text-sm outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
+              className="h-8 flex-1 border border-slate-300 rounded-md px-2 py-1 text-xs outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-300"
               value={q}
               onChange={e => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
             />
-            <span className="text-sm text-slate-500">{isSearching ? 'Searching…' : 'Type to search'}</span>
+            <span className="text-xs text-slate-500">{isSearching ? 'Searching…' : 'Type to search'}</span>
           </div>
         </form>
 
-        {/* Table (unchanged columns) */}
+        {/* TABLE — includes centered Timeoff column */}
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
-          <table className="min-w-[2100px] text-xs md:text-sm table-fixed">
+          <table className="min-w-[2300px] text-xs md:text-sm table-fixed">
             <colgroup>
               {/* identity/meta */}
               <col className="w-[7rem]" />
@@ -375,18 +367,19 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
               <col className="w-[14rem]" />
               <col className="w-[14rem]" />
               <col className="w-[12rem]" />
-              {/* attendance */}
+              {/* presence */}
               <col className="w-[6rem]" />
               <col className="w-[6rem]" />
+              <col className="w-[12rem]" /> {/* Timeoff */}
               <col className="w-[7rem]" />
               {/* overtime */}
               <col className="w-[6.5rem]" />
               <col className="w-[8rem]" />
               <col className="w-[8rem]" />
               <col className="w-[8rem]" />
-              {/* presence */}
+              {/* presence bonus */}
               <col className="w-[8rem]" />
-              {/* calculations */}
+              {/* calc */}
               <col className="w-[8rem]" />
               <col className="w-[6.5rem]" />
               <col className="w-[9rem]" />
@@ -409,6 +402,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Timeoff</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Work Hours</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">OT Hours</th>
@@ -427,7 +421,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
 
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={21}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={22}>No data</td></tr>
               )}
 
               {useMemo(() => groups, [groups]).map((g) => {
@@ -435,6 +429,7 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
                 const totalMonthlyOT        = serverTotal?.monthly_ot        ?? g.monthlyOt
                 const totalMonthlyBsott     = serverTotal?.monthly_bsott     ?? g.monthlyBsott
                 const totalMonthlyPresence  = serverTotal?.monthly_presence  ?? g.monthlyPresence
+                const workDays              = serverTotal?.work_days         ?? 0
                 const bpjsTk = serverTotal?.bpjs_tk  ?? g.bpjsTk
                 const bpjsKes= serverTotal?.bpjs_kes ?? g.bpjsKes
 
@@ -448,10 +443,11 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
                       const otTot   = otTotal(r)
                       const prem    = presenceDaily(r)
                       const totalDay= totalSalary(r)
+                      const toName  = (r.timeoff_name && String(r.timeoff_name).trim() !== '') ? r.timeoff_name : '-'
 
                       return (
                         <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                          {/* Identity / Meta */}
+                          {/* identity */}
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
@@ -462,22 +458,28 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
 
-                          {/* Attendance */}
+                          {/* presence */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
+
+                          {/* Timeoff — centered dash */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center">
+                            <span className="inline-block w-full text-center">{toName || '-'}</span>
+                          </td>
+
                           <td className="px-3 py-2 whitespace-nowrap text-center">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 && present ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
                               {present ? safeNum(r.real_work_hour) : 0} h
                             </span>
                           </td>
 
-                          {/* OT */}
+                          {/* overtime */}
                           <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{otHours(r)} h</span></td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot1)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot2)}</td>
                           <td className={`px-3 py-2 whitespace-nowrap font-bold ${otTot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(otTot)}</td>
 
-                          {/* Presence & calc */}
+                          {/* presence & calc */}
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
@@ -488,9 +490,9 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
                       )
                     })}
 
-                    {/* Subtotal per employee */}
+                    {/* per-employee subtotal */}
                     <tr className="bg-amber-50/60">
-                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={15}>
+                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={16}>
                         Grand Total ({g.name})
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
@@ -501,13 +503,14 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
                       </td>
                     </tr>
 
-                    {/* Presence & BPJS info */}
+                    {/* presence, BPJS & work days */}
                     <tr className="bg-emerald-50/50">
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={21}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={22}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
                           <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
-                          <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
-                          <span>BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></span>
+                          <span>Work Days: <b>{workDays}</b> days</span>
+                          <span>BPJS Employment: <b>{fmtIDR(bpjsTk)}</b></span>
+                          <span>BPJS Health: <b>{fmtIDR(bpjsKes)}</b></span>
                         </div>
                       </td>
                     </tr>
@@ -522,70 +525,14 @@ export default function Index({ rows, filters, employeeTotals = {}, orgOptions =
         <div className="flex items-center justify-between text-sm flex-wrap gap-3">
           <div>Total: {total}</div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => goto(Math.max(1, current - 1))} disabled={current === 1} className={`px-3 py-1 rounded border ${current === 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Prev</button>
+            <button onClick={() => goto(Math.max(1, current - 1))} disabled={current === 1} className={`px-2.5 py-1 rounded border ${current === 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Prev</button>
             {pages.map((p, i) =>
               p === '…' ? <span key={`e-${i}`} className="px-2 text-slate-500 select-none">…</span> : (
-                <button key={p} onClick={() => goto(p)} className={`px-3 py-1 rounded border ${p === current ? 'bg-sky-600 text-white border-sky-600' : 'bg-white hover:bg-slate-50'}`}>{p}</button>
+                <button key={p} onClick={() => goto(p)} className={`px-2.5 py-1 rounded border ${p === current ? 'bg-sky-600 text-white border-sky-600' : 'bg-white hover:bg-slate-50'}`}>{p}</button>
               )
             )}
-            <button onClick={() => goto(Math.min(last, current + 1))} disabled={current === last} className={`px-3 py-1 rounded border ${current === last ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Next</button>
+            <button onClick={() => goto(Math.min(last, current + 1))} disabled={current === last} className={`px-2.5 py-1 rounded border ${current === last ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Next</button>
           </div>
-        </div>
-
-        {/* Cards (Mobile) — unchanged */}
-        <div className="md:hidden space-y-3">
-          {groups.map((g) => {
-            const serverTotal = employeeTotals?.[g.employee_id] || null
-            const totalMonthlyOT        = serverTotal?.monthly_ot        ?? g.monthlyOt
-            const totalMonthlyBsott     = serverTotal?.monthly_bsott     ?? g.monthlyBsott
-            const totalMonthlyPresence  = serverTotal?.monthly_presence  ?? g.monthlyPresence
-            const bpjsTk = serverTotal?.bpjs_tk  ?? g.bpjsTk
-            const bpjsKes= serverTotal?.bpjs_kes ?? g.bpjsKes
-
-            return (
-              <div key={g.key} className="space-y-3">
-                {g.items.map((r) => {
-                  const base = baseSalary(r)
-                  const ot   = otTotal(r)
-                  const bsott= totalSalary(r)
-                  const prem = presenceDaily(r)
-                  return (
-                    <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
-                          <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
-                          <div className="text-base font-semibold truncate">{r.full_name}</div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-xs text-slate-500">Daily Total</div>
-                          <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
-                          <div className="text-xs text-slate-500 mt-1">OT Total</div>
-                          <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-lg bg-sky-50 px-2 py-2">In<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_in)}</span></div>
-                        <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
-                        <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{isPresent(r)? safeNum(r.real_work_hour): 0} h</span></div>
-                        <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{otHours(r)} h</span></div>
-                        <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
-                        <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(otFirst(r))} • {fmtIDR(otSecond(r))}</span></div>
-                        <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
-                      </div>
-
-                      <div className="mt-3 text-[11px] text-emerald-800 border-t pt-2">
-                        <div><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></div>
-                        <div>OT: <b>{fmtIDR(totalMonthlyOT)}</b> • Daily Total: <b>{fmtIDR(totalMonthlyBsott)}</b></div>
-                        <div>BPJS TK: <b>{fmtIDR(bpjsTk)}</b> • BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
         </div>
       </main>
     </div>
