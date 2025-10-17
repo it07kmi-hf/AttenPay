@@ -85,16 +85,15 @@ class AttendanceController extends Controller
 
     /**
      * List data: default range = tanggal 1 bulan berjalan → hari ini (Asia/Jakarta).
-     * - Default paginate: 35 per page
+     * - ✅ Paginate FIXED: 10 per page (seragam local & production)
      * - Select kolom yang dipakai FE + kolom premi/BPJS
      */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
 
-        // ✅ Default 35 per halaman (batasi max 500)
-        $perPage = (int) $req->query('per_page', 35);
-        $perPage = $perPage > 0 ? min($perPage, 500) : 35;
+        // ✅ FIXED 10 per halaman (abaikan query per_page biar konsisten)
+        $perPage = 10;
 
         // Default: bulan ini sampai hari ini (Asia/Jakarta)
         $tz         = 'Asia/Jakarta';
@@ -145,7 +144,7 @@ class AttendanceController extends Controller
             });
         }
 
-        // Paginate
+        // ✅ Paginate FIXED 10
         $rows = $builder->paginate($perPage)->withQueryString();
 
         // Agregat untuk seluruh range (bukan per halaman)
@@ -169,7 +168,7 @@ class AttendanceController extends Controller
                 'from'      => $from,
                 'to'        => $to,
                 'q'         => $q,
-                'per_page'  => $perPage,
+                'per_page'  => $perPage, // selalu 10
             ],
             'employeeTotals' => $employeeTotals,
         ]);

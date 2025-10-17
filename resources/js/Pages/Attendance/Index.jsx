@@ -4,13 +4,16 @@ import { Link, router } from '@inertiajs/react'
 // pakai path logo yang sama seperti di halaman login
 const LOGO_KMI = '/img/logo-kmi.png'
 
+// ✅ FIXED PER PAGE (10) — seragam local & production
+const PER_PAGE = 10
+
 export default function Index({ rows, filters, employeeTotals = {} }) {
   // === State filter ===
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  const [perPage] = useState(filters.per_page || 35) // ✅ default 35
+  const [perPage] = useState(PER_PAGE) // ✅ selalu 10
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
@@ -340,32 +343,32 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
           <table className="min-w-[2100px] text-xs md:text-sm table-fixed">
             <colgroup>
               {/* identitas/meta */}
-              <col className="w-[7rem]" />   {/* Date */}
-              <col className="w-[7rem]" />   {/* Employee ID */}
-              <col className="w-[12rem]" />  {/* Name */}
-              <col className="w-[6rem]" />   {/* Gender */}
-              <col className="w-[8rem]" />   {/* Join Date */}
-              <col className="w-[14rem]" />  {/* Branch Name */}
-              <col className="w-[14rem]" />  {/* Organization */}
-              <col className="w-[12rem]" />  {/* Job Position */}
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[12rem]" />
               {/* absensi */}
-              <col className="w-[6rem]" />   {/* In */}
-              <col className="w-[6rem]" />   {/* Out */}
-              <col className="w-[7rem]" />   {/* Work Hours */}
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[7rem]" />
               {/* lembur */}
-              <col className="w-[6.5rem]" /> {/* OT Hours */}
-              <col className="w-[8rem]" />   {/* OT 1 */}
-              <col className="w-[8rem]" />   {/* OT 2 */}
-              <col className="w-[8rem]" />   {/* OT Total */}
+              <col className="w-[6.5rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
               {/* presence */}
-              <col className="w-[8rem]" />   {/* Presence Daily */}
+              <col className="w-[8rem]" />
               {/* kalkulasi */}
-              <col className="w-[8rem]" />   {/* Hourly Rate */}
-              <col className="w-[6.5rem]" /> {/* Billable H */}
-              <col className="w-[9rem]" />   {/* Basic Salary */}
-              <col className="w-[9rem]" />   {/* Daily Total */}
+              <col className="w-[8rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[9rem]" />
               {/* tenure */}
-              <col className="w-[7rem]" />   {/* Tenure ≥1y */}
+              <col className="w-[7rem]" />
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
