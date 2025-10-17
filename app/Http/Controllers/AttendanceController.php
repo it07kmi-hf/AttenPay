@@ -11,16 +11,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class AttendanceController extends Controller
 {
-    /**
-     * Hitung agregat per karyawan untuk seluruh hasil filter (bukan per halaman).
-     * Return: array keyed by employee_id -> [
-     *   'employee_id','full_name','monthly_ot','monthly_bsott','monthly_presence','bpjs_tk','bpjs_kes'
-     * ]
-     * Logika:
-     * - Baris tidak hadir = 0 (Hourly/OT/Presence/Total).
-     * - Jika daily_total_amount numeric → pakai apa adanya (termasuk 0).
-     * - Jika NULL dan hadir → hitung base (rate*billable) + OT. Jika NULL dan tidak hadir → 0.
-     */
     private function buildEmployeeTotals($baseQuery): array
     {
         $rows = (clone $baseQuery)->select([
@@ -83,24 +73,15 @@ class AttendanceController extends Controller
         return $totals;
     }
 
-    /**
-     * List data: default range = tanggal 1 bulan berjalan → hari ini (Asia/Jakarta).
-     * - ✅ Paginate FIXED: 10 per page (seragam local & production)
-     * - Select kolom yang dipakai FE + kolom premi/BPJS
-     */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
+        $perPage = 10; // FIXED 10 per halaman
 
-        // ✅ FIXED 10 per halaman (abaikan query per_page biar konsisten)
-        $perPage = 10;
-
-        // Default: bulan ini sampai hari ini (Asia/Jakarta)
         $tz         = 'Asia/Jakarta';
         $today      = now($tz)->toDateString();
         $monthStart = now($tz)->startOfMonth()->toDateString();
 
-        // Ambil dari query jika ada; jika invalid pakai default
         $from = $req->query('from', $monthStart);
         $to   = $req->query('to', $today);
 
@@ -111,7 +92,6 @@ class AttendanceController extends Controller
 
         $q = trim((string) $req->query('q', ''));
 
-        // SELECT kolom untuk FE
         $builder = Attendance::query()
             ->select([
                 'id',
@@ -119,6 +99,8 @@ class AttendanceController extends Controller
                 'employee_id','full_name','schedule_date',
                 // jam hadir
                 'clock_in','clock_out','real_work_hour',
+                // 👉 timeoff
+                'timeoff_name',
                 // lembur (rupiah)
                 'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',
                 // cabang/org/job
@@ -137,17 +119,14 @@ class AttendanceController extends Controller
             ->orderBy('employee_id', 'asc');
 
         if ($q !== '') {
-            // prefix match agar pakai index
             $builder->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
                   ->orWhere('full_name', 'like', $q.'%');
             });
         }
 
-        // ✅ Paginate FIXED 10
         $rows = $builder->paginate($perPage)->withQueryString();
 
-        // Agregat untuk seluruh range (bukan per halaman)
         $baseQueryForAgg = Attendance::query()
             ->where('branch_id', $branch)
             ->whereBetween('schedule_date', [$from, $to]);
@@ -168,16 +147,12 @@ class AttendanceController extends Controller
                 'from'      => $from,
                 'to'        => $to,
                 'q'         => $q,
-                'per_page'  => $perPage, // selalu 10
+                'per_page'  => $perPage,
             ],
             'employeeTotals' => $employeeTotals,
         ]);
     }
 
-    /**
-     * Export CSV / Excel-compatible CSV / PDF.
-     * - CSV menulis "0" untuk nilai kosong (cohort lama).
-     */
     public function export(Request $req)
     {
         $format = strtolower($req->query('format', 'csv')); // csv | xlsx | pdf
@@ -207,11 +182,9 @@ class AttendanceController extends Controller
             });
         }
 
-        // Urutkan
         $baseQuery->orderBy('schedule_date', 'asc')
                   ->orderBy('employee_id', 'asc');
 
-        // Nama file
         $meta = (clone $baseQuery)
             ->reorder()
             ->select('employee_id', 'full_name')
@@ -225,7 +198,6 @@ class AttendanceController extends Controller
 
         $filenameBase = "attendance_{$nameSlug}_{$branch}_{$from}_{$to}";
 
-        // ===== CSV / Excel-compatible CSV =====
         if ($format === 'csv' || $format === 'xlsx') {
             $filename = $filenameBase . ($format === 'xlsx' ? '.xlsx.csv' : '.csv');
 
@@ -249,7 +221,6 @@ class AttendanceController extends Controller
 
             $callback = function () use ($baseQuery, $columns, $selectCols) {
                 $out = fopen('php://output', 'w');
-                // BOM UTF-8 untuk Excel Windows
                 fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
                 fputcsv($out, $columns);
 
@@ -285,7 +256,6 @@ class AttendanceController extends Controller
             return response()->stream($callback, 200, $headers);
         }
 
-        // ===== PDF =====
         if ($format === 'pdf') {
             $rows = (clone $baseQuery)->select([
                 'schedule_date','employee_id','full_name','clock_in','clock_out',
@@ -308,7 +278,6 @@ class AttendanceController extends Controller
             return $pdf->download($filenameBase . '.pdf');
         }
 
-        // Fallback
         return redirect()->route('attendance.index')->with('error', 'Unknown export format.');
     }
 }

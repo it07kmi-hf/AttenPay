@@ -1,19 +1,15 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
-// pakai path logo yang sama seperti di halaman login
 const LOGO_KMI = '/img/logo-kmi.png'
-
-// ✅ FIXED PER PAGE (10) — seragam local & production
 const PER_PAGE = 10
 
 export default function Index({ rows, filters, employeeTotals = {} }) {
-  // === State filter ===
   const [q, setQ] = useState(filters.q || '')
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  const [perPage] = useState(PER_PAGE) // ✅ selalu 10
+  const [perPage] = useState(PER_PAGE)
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
@@ -21,7 +17,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // live search (debounce) untuk q
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
@@ -37,7 +32,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
   const data = rows?.data ?? []
 
-  // ===== Helpers formatting =====
   const fmtTime = (val) => {
     if (!val) return '-'
     const m = String(val).match(/\b(\d{2}:\d{2})/)
@@ -59,11 +53,9 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     return String(name).split(/\s[–—-]\s/)[0]
   }
 
-  // ===== Kehadiran =====
   const isPresent = (r) =>
     !!(r.clock_in && r.clock_out && Number(r.real_work_hour) > 0)
 
-  // ===== Perhitungan (0 jika tidak hadir) =====
   const hourlyRate = (r) => isPresent(r) ? safeNum(r.hourly_rate_used) : 0
   const billableHours = (r) => {
     if (!isPresent(r)) return 0
@@ -83,13 +75,11 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
   const totalSalary = (r) => {
     if (r.daily_total_amount !== undefined && r.daily_total_amount !== null && Number.isFinite(Number(r.daily_total_amount))) {
-      return Number(r.daily_total_amount) // 0 pun ditampilkan sebagai Rp 0
+      return Number(r.daily_total_amount)
     }
-    // fallback untuk data lama jika NULL: hadir → base + OT; tidak hadir → 0
     return isPresent(r) ? (baseSalary(r) + otTotal(r)) : 0
   }
 
-  // Search actions
   const search = (e) => {
     e.preventDefault()
     router.get('/attendance', { q, from, to, branch_id: branch, per_page: perPage }, {
@@ -101,7 +91,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, { replace: true, preserveScroll: true })
   }
 
-  // Export helper
   const exportUrl = (fmt) =>
     `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
   const confirmExport = async (fmt) => {
@@ -135,7 +124,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     }
   }
 
-  // Pagination
   const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
   const last    = rows?.last_page    ?? rows?.meta?.last_page    ?? 1
   const total   = rows?.total        ?? rows?.meta?.total        ?? 0
@@ -152,10 +140,8 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
     })
   }
 
-  // Totals map dari server
   const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
 
-  // Group per employee
   const groups = useMemo(() => {
     const map = new Map(), order = []
     data.forEach((r, idx) => {
@@ -194,7 +180,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
-          {/* === LOGO + TITLE === */}
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
               <img
@@ -214,7 +199,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
             </div>
           </div>
 
-          {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="flex overflow-hidden rounded-lg border border-white/30">
               <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
@@ -222,7 +206,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
               <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
-            {/* Logout */}
             <Link
               href="/logout"
               method="post"
@@ -247,7 +230,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
             </Link>
           </div>
 
-          {/* Mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
             <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
             <div className="relative">
@@ -261,7 +243,6 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
               )}
             </div>
 
-            {/* Logout icon mobile */}
             <Link
               href="/logout"
               method="post"
@@ -338,37 +319,38 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
           </div>
         </form>
 
-        {/* TABLE — tampilkan SEMUA kolom */}
+        {/* TABLE */}
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
-          <table className="min-w-[2100px] text-xs md:text-sm table-fixed">
+          <table className="min-w-[2300px] text-xs md:text-sm table-fixed">
             <colgroup>
               {/* identitas/meta */}
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[12rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[14rem]" />
-              <col className="w-[14rem]" />
-              <col className="w-[12rem]" />
+              <col className="w-[7rem]" />   {/* Date */}
+              <col className="w-[7rem]" />   {/* Employee ID */}
+              <col className="w-[12rem]" />  {/* Name */}
+              <col className="w-[6rem]" />   {/* Gender */}
+              <col className="w-[8rem]" />   {/* Join Date */}
+              <col className="w-[14rem]" />  {/* Branch Name */}
+              <col className="w-[14rem]" />  {/* Organization */}
+              <col className="w-[12rem]" />  {/* Job Position */}
               {/* absensi */}
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[7rem]" />
+              <col className="w-[6rem]" />   {/* In */}
+              <col className="w-[6rem]" />   {/* Out */}
+              <col className="w-[12rem]" />  {/* Timeoff Name (NEW) */}
+              <col className="w-[7rem]" />   {/* Work Hours */}
               {/* lembur */}
-              <col className="w-[6.5rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[8rem]" />
+              <col className="w-[6.5rem]" /> {/* OT Hours */}
+              <col className="w-[8rem]" />   {/* OT 1 */}
+              <col className="w-[8rem]" />   {/* OT 2 */}
+              <col className="w-[8rem]" />   {/* OT Total */}
               {/* presence */}
-              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />   {/* Presence Daily */}
               {/* kalkulasi */}
-              <col className="w-[8rem]" />
-              <col className="w-[6.5rem]" />
-              <col className="w-[9rem]" />
-              <col className="w-[9rem]" />
+              <col className="w-[8rem]" />   {/* Hourly Rate */}
+              <col className="w-[6.5rem]" /> {/* Billable H */}
+              <col className="w-[9rem]" />   {/* Basic Salary */}
+              <col className="w-[9rem]" />   {/* Daily Total */}
               {/* tenure */}
-              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />   {/* Tenure ≥1y */}
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
@@ -385,6 +367,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Timeoff</th> {/* NEW */}
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Work Hours</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">OT Hours</th>
@@ -403,7 +386,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={21}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={22}>No data</td></tr>
               )}
 
               {useMemo(() => groups, [groups]).map((g) => {
@@ -441,6 +424,14 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                           {/* Absensi */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
+
+                          {/* NEW: Timeoff name (langsung kanan Out) */}
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {r.timeoff_name
+                              ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">{r.timeoff_name}</span>
+                              : <span className="text-slate-500">-</span>}
+                          </td>
+
                           <td className="px-3 py-2 whitespace-nowrap text-center">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 && present ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
                               {present ? safeNum(r.real_work_hour) : 0} h
@@ -466,7 +457,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                     {/* Subtotal per employee */}
                     <tr className="bg-amber-50/60">
-                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={15}>
+                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={16}>
                         Grand Total ({g.name})
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
@@ -479,7 +470,7 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
 
                     {/* Presence & BPJS info */}
                     <tr className="bg-emerald-50/50">
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={21}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={22}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
                           <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
                           <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
@@ -532,6 +523,14 @@ export default function Index({ rows, filters, employeeTotals = {} }) {
                           <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
                           <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
                           <div className="text-base font-semibold truncate">{r.full_name}</div>
+                          {/* NEW: kecilkan info timeoff kalau ada */}
+                          {r.timeoff_name && (
+                            <div className="mt-1">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700">
+                                {r.timeoff_name}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="text-right shrink-0">
                           <div className="text-xs text-slate-500">Daily Total</div>
