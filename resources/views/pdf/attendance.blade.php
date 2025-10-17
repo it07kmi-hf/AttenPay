@@ -92,13 +92,23 @@
       return is_finite($n) ? $n : $def;
   };
 
-  // Hitung rate/jam, jam billable, basic salary, dan total final per baris:
-  $hourlyRate = function ($row) use ($FALLBACK_RATE, $safeNum) {
-      $r = $safeNum($row->hourly_rate_used, 0);
-      return $r > 0 ? (int)$r : $FALLBACK_RATE;
+  // === Deteksi hadir: harus ada jam kerja > 0 + clock in & out terisi ===
+  $isPresent = function ($row) use ($safeNum) {
+      $cin   = trim((string)($row->clock_in  ?? ''));
+      $cout  = trim((string)($row->clock_out ?? ''));
+      $hours = max(0, $safeNum($row->real_work_hour, 0));
+      return ($cin !== '' && $cout !== '' && $hours > 0);
   };
 
-  $billableHours = function ($row) use ($safeNum) {
+  // Rate/jam dipakai HANYA jika hadir (kalau tidak → 0; tidak pakai fallback)
+  $hourlyRate = function ($row) use ($safeNum, $isPresent) {
+      if (!$isPresent($row)) return 0;
+      return (int) max(0, $safeNum($row->hourly_rate_used, 0));
+  };
+
+  // Jam billable: 0 jika tidak hadir; kalau hadir pakai daily_billable_hours atau min(7, real_work_hour)
+  $billableHours = function ($row) use ($safeNum, $isPresent) {
+      if (!$isPresent($row)) return 0;
       if (!is_null($row->daily_billable_hours)) {
           $b = max(0, $safeNum($row->daily_billable_hours, 0));
       } else {
@@ -107,16 +117,25 @@
       return round($b, 2);
   };
 
+  // OT per pecahan (0 kalau tidak hadir)
+  $otHours = fn($row) => $isPresent($row) ? (int)max(0, (float)($row->overtime_hours ?? 0)) : 0;
+  $otFirst = fn($row) => $isPresent($row) ? (int)max(0, (float)($row->overtime_first_amount ?? 0)) : 0;
+  $otSecond= fn($row) => $isPresent($row) ? (int)max(0, (float)($row->overtime_second_amount ?? 0)) : 0;
+  $otTotal = fn($row) => $isPresent($row) ? (int)max(0, (float)($row->overtime_total_amount ?? 0)) : 0;
+
+  // Basic Salary = billable * hourlyRate (0 kalau tidak hadir)
   $basicSalary = function ($row) use ($hourlyRate, $billableHours) {
       return (int) round($billableHours($row) * $hourlyRate($row));
   };
 
-  $dailyFinal = function ($row) use ($basicSalary, $safeNum) {
+  // Total harian:
+  // - Jika daily_total_amount numeric → gunakan apa adanya (legacy-safe)
+  // - Jika NULL → hadir: base + OT; tidak hadir: 0
+  $dailyFinal = function ($row) use ($basicSalary, $otTotal, $isPresent) {
       if (!is_null($row->daily_total_amount) && is_numeric($row->daily_total_amount)) {
           return (int)$row->daily_total_amount;
       }
-      $otTot = (int)$safeNum($row->overtime_total_amount, 0);
-      return (int)$basicSalary($row) + $otTot;
+      return $isPresent($row) ? ($basicSalary($row) + $otTotal($row)) : 0;
   };
 
   $fmtRupiah = fn($n) => 'Rp ' . number_format((float)$n, 0, ',', '.');
@@ -171,11 +190,13 @@
     <tbody>
       @foreach ($rows as $r)
         @php
-          $work   = $safeNum($r->real_work_hour, 0);
-          $otH    = $safeNum($r->overtime_hours, 0);
-          $ot1    = $safeNum($r->overtime_first_amount, 0);
-          $ot2    = $safeNum($r->overtime_second_amount, 0);
-          $otTot  = $safeNum($r->overtime_total_amount, 0);
+          $present = $isPresent($r);
+
+          $work   = $present ? max(0, $safeNum($r->real_work_hour, 0)) : 0;
+          $otH    = $otHours($r);
+          $ot1    = $otFirst($r);
+          $ot2    = $otSecond($r);
+          $otTot  = $otTotal($r);
 
           $base   = $basicSalary($r);
           $totSal = $dailyFinal($r);
@@ -232,7 +253,7 @@
 
 <script type="text/php">
 if (isset($pdf)) {
-  // Sesuaikan posisi jika perlu (x, y) untuk A4 landscape
+  // A4 landscape; sesuaikan posisi jika perlu
   $pdf->page_text(520, 810, "Page {PAGE_NUM}/{PAGE_COUNT}", null, 8, [0.4,0.4,0.4]);
 }
 </script>
