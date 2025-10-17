@@ -6,7 +6,7 @@
     @page { margin: 24px; }
     body {
       font-family: DejaVu Sans, Arial, sans-serif;
-      font-size: 10px;                 /* kecilin font dasar */
+      font-size: 10px;                 /* << kecilin font dasar */
       color: #111;
       background: #f8fafc;
     }
@@ -37,7 +37,7 @@
     }
     th,td{
       border:1.1px solid #7aa2ff;      /* border sel lebih gelap & tegas */
-      padding:6px 8px;                 /* kecilin padding */
+      padding:6px 8px;                 /* << kecilin padding */
       text-align:left;                 /* semua rata kiri */
       white-space:nowrap;              /* cegah patah baris */
       line-height:1.22;
@@ -75,45 +75,12 @@
 </head>
 <body>
 @php
-  // ===== Helper & Fallback untuk data lama =====
-  $FALLBACK_RATE = 28153;
-
-  $safeNum = function ($v, $def = 0) {
-      $n = is_null($v) ? $def : (float)$v;
-      return is_finite($n) ? $n : $def;
+  $HOURLY_RATE = 28153;
+  $calcDailyTotal = function ($work) use ($HOURLY_RATE) {
+      $h = max(0, (float)($work ?? 0));
+      $billable = min($h, 7);
+      return (int) round($billable * $HOURLY_RATE);
   };
-
-  // Hitung rate/jam, jam billable, basic salary, dan total final per baris:
-  $hourlyRate = function ($row) use ($FALLBACK_RATE, $safeNum) {
-      $r = $safeNum($row->hourly_rate_used, 0);
-      return $r > 0 ? (int)$r : $FALLBACK_RATE;
-  };
-
-  $billableHours = function ($row) use ($safeNum) {
-      // Pakai daily_billable_hours jika ada; fallback min(7, real_work_hour)
-      if (!is_null($row->daily_billable_hours)) {
-          $b = max(0, $safeNum($row->daily_billable_hours, 0));
-      } else {
-          $b = min(7, max(0, $safeNum($row->real_work_hour, 0)));
-      }
-      // batasi 2 desimal untuk tampilan rapi
-      return round($b, 2);
-  };
-
-  $basicSalary = function ($row) use ($hourlyRate, $billableHours) {
-      return (int) round($billableHours($row) * $hourlyRate($row));
-  };
-
-  $dailyFinal = function ($row) use ($basicSalary, $safeNum) {
-      // Jika daily_total_amount sudah disimpan (final: base+OT), pakai itu.
-      if (!is_null($row->daily_total_amount) && is_numeric($row->daily_total_amount)) {
-          return (int)$row->daily_total_amount;
-      }
-      // Fallback: base + OT total
-      $otTot = (int)$safeNum($row->overtime_total_amount, 0);
-      return (int)$basicSalary($row) + $otTot;
-  };
-
   $fmtRupiah = fn($n) => 'Rp ' . number_format((float)$n, 0, ',', '.');
   $fmtDate   = fn($d) => $d ? substr((string)$d, 0, 10) : '-';
   $fmtTime   = fn($t) => $t && strlen($t) >= 5 ? substr((string)$t, 0, 5) : ($t ?: '-');
@@ -121,7 +88,7 @@
   $logoPathFs = public_path('img/logo-kmi.png');
   $logoExists = file_exists($logoPathFs);
 
-  $sumWork = $sumBase = $sumOTHours = $sumOT1 = $sumOT2 = $sumOTTotal = $sumTotal = 0;
+  $sumWork = $sumDaily = $sumOTHours = $sumOT1 = $sumOT2 = $sumOTTotal = $sumTotalSalary = 0;
 @endphp
 
 <div class="brand-wrap">
@@ -163,22 +130,21 @@
     <tbody>
       @foreach ($rows as $r)
         @php
-          $work   = $safeNum($r->real_work_hour, 0);
-          $otH    = $safeNum($r->overtime_hours, 0);
-          $ot1    = $safeNum($r->overtime_first_amount, 0);
-          $ot2    = $safeNum($r->overtime_second_amount, 0);
-          $otTot  = $safeNum($r->overtime_total_amount, 0);
+          $work   = (float)($r->real_work_hour ?? 0);
+          $otH    = (float)($r->overtime_hours ?? 0);
+          $ot1    = (float)($r->overtime_first_amount ?? 0);
+          $ot2    = (float)($r->overtime_second_amount ?? 0);
+          $otTot  = (float)($r->overtime_total_amount ?? 0);
+          $daily  = $calcDailyTotal($work);
+          $totSal = $daily + $otTot;
 
-          $base   = $basicSalary($r);      // pakai hourly_rate_used × daily_billable_hours (fallback jika kosong)
-          $totSal = $dailyFinal($r);       // pakai daily_total_amount jika ada, fallback base+OT
-
-          $sumWork    += $work;
-          $sumBase    += $base;
-          $sumOTHours += $otH;
-          $sumOT1     += $ot1;
-          $sumOT2     += $ot2;
-          $sumOTTotal += $otTot;
-          $sumTotal   += $totSal;
+          $sumWork        += $work;
+          $sumDaily       += $daily;
+          $sumOTHours     += $otH;
+          $sumOT1         += $ot1;
+          $sumOT2         += $ot2;
+          $sumOTTotal     += $otTot;
+          $sumTotalSalary += $totSal;
         @endphp
         <tr>
           <td>{{ $fmtDate($r->schedule_date) }}</td>
@@ -193,7 +159,7 @@
               <span class="chip chip-dim">{{ number_format($work, 2, ',', '.') }} h</span>
             @endif
           </td>
-          <td>{{ $fmtRupiah($base) }}</td>
+          <td>{{ $fmtRupiah($daily) }}</td>
           <td>{{ number_format($otH, 0, ',', '.') }}</td>
           <td>{{ $fmtRupiah($ot1) }}</td>
           <td>{{ $fmtRupiah($ot2) }}</td>
@@ -206,12 +172,12 @@
       <tr>
         <th colspan="5">Grand Total</th>
         <th>{{ number_format($sumWork, 2, ',', '.') }}</th>
-        <th>{{ $fmtRupiah($sumBase) }}</th>
+        <th>{{ $fmtRupiah($sumDaily) }}</th>
         <th>{{ number_format($sumOTHours, 0, ',', '.') }}</th>
         <th>{{ $fmtRupiah($sumOT1) }}</th>
         <th>{{ $fmtRupiah($sumOT2) }}</th>
         <th>{{ $fmtRupiah($sumOTTotal) }}</th>
-        <th>{{ $fmtRupiah($sumTotal) }}</th>
+        <th>{{ $fmtRupiah($sumTotalSalary) }}</th>
       </tr>
     </tfoot>
   </table>
@@ -224,7 +190,6 @@
 
 <script type="text/php">
 if (isset($pdf)) {
-  // sesuaikan koordinat jika butuh (x, y)
   $pdf->page_text(520, 810, "Page {PAGE_NUM}/{PAGE_COUNT}", null, 8, [0.4,0.4,0.4]);
 }
 </script>

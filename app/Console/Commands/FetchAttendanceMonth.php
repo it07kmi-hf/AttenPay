@@ -3,91 +3,61 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Services\MekariClient;
-use App\Services\OvertimeCalculator;
-use App\Models\Attendance;
-use Carbon\CarbonImmutable;
+use Illuminate\Support\Carbon;
 
+/**
+ * Loop per HARI dalam 1 bulan (YYYY-MM), memanggil fetch:attendance:today
+ * dengan --from=--to=tanggal tsb. Semua opsi penting diteruskan.
+ */
 class FetchAttendanceMonth extends Command
 {
-    protected $signature = 'fetch:attendance:month {--period=} {--branch=21089} {--chunk=0}';
-    protected $description = 'Fetch attendance for a single month (YYYY-MM). Optional chunking to reduce timeout risk.';
+    protected $signature = 'fetch:attendance:month
+        {--branch=21089 : Branch ID}
+        {--job-levels=44480,44481,44482,44492 : Daftar job_level_id (whitelist)}
+        {--month= : Bulan target YYYY-MM (default: bulan berjalan Asia/Jakarta)}
+        {--limit=200 : Batas per halaman di API (per_page)}
+        {--sleep=200 : Delay antar hari (ms)}';
 
-    public function handle(MekariClient $api, OvertimeCalculator $calc): int
+    protected $description = 'Tarik data absensi 1 bulan penuh (loop harian).';
+
+    public function handle(): int
     {
-        // minimalkan risiko timeout CLI
-        @ini_set('memory_limit', '-1');
-        @set_time_limit(0);
+        $tz      = 'Asia/Jakarta';
+        $branch  = (int) $this->option('branch');
+        $levels  = (string) $this->option('job-levels');
+        $limit   = max(1, (int) $this->option('limit'));
+        $sleepMs = max(0, (int) $this->option('sleep'));
 
-        $period = (string) $this->option('period'); // format: YYYY-MM
-        $branch = (int) $this->option('branch');
-        $chunk  = (int) $this->option('chunk');     // 0 = tanpa chunk; >0 = pecah per N hari
+        $monthOpt = $this->option('month') ?: now($tz)->format('Y-m');
 
-        if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
-            $this->error('Please provide --period in YYYY-MM format, e.g. --period=2025-05');
-            return self::INVALID;
-        }
+        try { $m = Carbon::createFromFormat('Y-m', $monthOpt, $tz); }
+        catch (\Throwable) { $this->error('Invalid --month (format: YYYY-MM)'); return self::INVALID; }
 
-        $start = CarbonImmutable::createFromFormat('Y-m', $period, 'Asia/Jakarta')->startOfMonth();
-        $end   = $start->endOfMonth();
+        $from = $m->copy()->startOfMonth()->toDateString();
+        $to   = $m->copy()->endOfMonth()->toDateString();
 
-        $this->info("Fetching month {$period} (branch {$branch})");
+        $this->line(sprintf(
+            'Monthly loop %s → %s (branch %d) job-levels: %s',
+            $from, $to, $branch, ($levels ?: '(all)')
+        ));
 
-        // Tanpa chunk: loop harian biasa
-        if ($chunk <= 0) {
-            for ($d = $start; $d->lessThanOrEqualTo($end); $d = $d->addDay()) {
-                $date = $d->format('Y-m-d');
-                $rows = $api->fetchDate($date, $branch);
-                foreach ($rows as $r) {
-                    $calcRow = $calc->apply($r); // hasil kolom EN: overtime_hours, dll.
-                    Attendance::updateOrCreate(
-                        [
-                            'employee_id'   => $calcRow['employee_id'],
-                            'schedule_date' => $calcRow['schedule_date'],
-                            'branch_id'     => $calcRow['branch_id'],
-                        ],
-                        $calcRow
-                    );
-                }
-                $this->line($date.' : '.count($rows).' rows');
-                usleep(120000); // jaga rate-limit
-            }
-            $this->info('Done month '.$period);
-            return self::SUCCESS;
-        }
+        for ($d = $m->copy()->startOfMonth(); $d->lte($m->copy()->endOfMonth()); $d->addDay()) {
+            $status = $this->call('fetch:attendance:today', [
+                '--branch'     => $branch,
+                '--job-levels' => $levels,
+                '--from'       => $d->toDateString(),
+                '--to'         => $d->toDateString(),
+                '--limit'      => $limit,
+            ]);
 
-        // Dengan chunk: pecah per N hari → jeda kecil antar chunk
-        $from = $start;
-        while ($from->lessThanOrEqualTo($end)) {
-            $to = $from->addDays($chunk - 1);
-            if ($to->greaterThan($end)) $to = $end;
-
-            $this->line("Chunk: ".$from->format('Y-m-d')." → ".$to->format('Y-m-d'));
-
-            for ($d = $from; $d->lessThanOrEqualTo($to); $d = $d->addDay()) {
-                $date = $d->format('Y-m-d');
-                $rows = $api->fetchDate($date, $branch);
-                foreach ($rows as $r) {
-                    $calcRow = $calc->apply($r);
-                    Attendance::updateOrCreate(
-                        [
-                            'employee_id'   => $calcRow['employee_id'],
-                            'schedule_date' => $calcRow['schedule_date'],
-                            'branch_id'     => $calcRow['branch_id'],
-                        ],
-                        $calcRow
-                    );
-                }
-                $this->line($date.' : '.count($rows).' rows');
-                usleep(120000);
+            if ($status !== 0) {
+                $this->warn("  ! child exit code {$status} pada ".$d->toDateString());
             }
 
-            // jeda antar chunk
-            usleep(250000);
-            $from = $to->addDay();
+            if ($sleepMs > 0) usleep($sleepMs * 1000);
         }
 
-        $this->info('Done month '.$period);
+        $this->info('Done (monthly).');
         return self::SUCCESS;
     }
 }

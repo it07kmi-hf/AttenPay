@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { Link, router } from '@inertiajs/react'
 
-// pakai path logo yang sama seperti di halaman login
 const LOGO_KMI = '/img/logo-kmi.png'
 
 export default function Index({ rows, filters }) {
@@ -9,9 +8,8 @@ export default function Index({ rows, filters }) {
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-
-  // === Constants ===
-  const HOURLY_RATE = 28298 // Rp 28.298 per hour
+  // === default 10 per halaman
+  const [perPage] = useState(filters.per_page || 10)
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
@@ -19,81 +17,101 @@ export default function Index({ rows, filters }) {
   const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // live search (debounce)
+  // live search (debounce) -> reset ke page 1
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
       setIsSearching(true)
-      router.get('/attendance', { q, from, to, branch_id: branch }, {
-        preserveState: true, replace: true, preserveScroll: true, only: ['rows','filters']
-      })
-      setIsSearching(false)
+      router.get(
+        '/attendance',
+        { q, from, to, branch_id: branch, per_page: perPage, page: 1 },
+        {
+          preserveState: true,
+          replace: true,
+          preserveScroll: true,
+          only: ['rows', 'filters'],
+          onFinish: () => setIsSearching(false),
+        }
+      )
     }, searchDelayMs)
     return () => { if (_searchTimer.current) clearTimeout(_searchTimer.current) }
-  }, [q])
+  }, [q]) // pencarian live hanya untuk q
 
   const data = rows?.data ?? []
 
+  // ===== Helpers formatting =====
   const fmtTime = (val) => {
     if (!val) return '-'
     const m = String(val).match(/\b(\d{2}:\d{2})/)
     return m ? m[1] : val
   }
   const fmtIDR = (n) => `Rp ${Number(n || 0).toLocaleString('id-ID')}`
+  const safeNum = (v) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : 0
+  }
+  const fmtBoolBadge = (v, yes = 'Yes', no = 'No') => (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold inline-block text-center ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+      {v ? yes : no}
+    </span>
+  )
+  const fmtDate = (v) => (v ? String(v).substring(0,10) : '-')
 
-  // Basic salary harian (cap 7 jam)
-  const calcDailyTotal = (realWorkHour) => {
-    const h = Math.max(0, parseFloat(realWorkHour ?? 0))
-    const billable = Math.min(h, 7)
-    return Math.round(billable * HOURLY_RATE)
+  // ===== Perhitungan (pakai nilai audit jika ada) =====
+  const FALLBACK_RATE = 28153
+  const hourlyRate = (r) => {
+    const n = Number(r.hourly_rate_used)
+    return Number.isFinite(n) && n > 0 ? n : FALLBACK_RATE
+  }
+  const billableHours = (r) => {
+    if (r.daily_billable_hours !== undefined && r.daily_billable_hours !== null) {
+      return Math.max(0, safeNum(r.daily_billable_hours))
+    }
+    return Math.min(7, Math.max(0, safeNum(r.real_work_hour)))
+  }
+  const baseSalary = (r) => Math.round(billableHours(r) * hourlyRate(r))
+  const otTotal = (r) => safeNum(r.overtime_total_amount)
+  const presenceDaily = (r) => safeNum(r.presence_premium_daily)
+  const totalSalary = (r) => {
+    const d = r.daily_total_amount
+    if (d !== undefined && d !== null && Number.isFinite(Number(d))) return Number(d)
+    return baseSalary(r) + otTotal(r)
   }
 
+  // Search actions
   const search = (e) => {
     e.preventDefault()
-    router.get('/attendance', { q, from, to, branch_id: branch }, {
-      preserveState: true, replace: true, preserveScroll: true
-    })
+    router.get(
+      '/attendance',
+      { q, from, to, branch_id: branch, per_page: perPage, page: 1 },
+      { preserveState: true, replace: true, preserveScroll: true }
+    )
   }
-
   const resetFilters = (e) => {
     e.preventDefault()
-    router.get('/attendance', { q: '', branch_id: branch }, { replace: true, preserveScroll: true })
+    router.get(
+      '/attendance',
+      { q: '', from: filters.from, to: filters.to, branch_id: branch, per_page: perPage, page: 1 },
+      { replace: true, preserveScroll: true }
+    )
   }
 
+  // Export helper
   const exportUrl = (fmt) =>
     `/attendance/export?format=${fmt}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&branch_id=${encodeURIComponent(branch)}&q=${encodeURIComponent(q)}`
 
-  // ===== Pagination =====
-  const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
-  const last = rows?.last_page ?? rows?.meta?.last_page ?? 1
-  const total = rows?.total ?? rows?.meta?.total ?? 0
-
-  const makePages = (cur, max) => {
-    if (max <= 7) return Array.from({ length: max }, (_, i) => i + 1)
-    if (cur <= 4) return [1, 2, 3, 4, '…', max]
-    if (cur >= max - 3) return [1, '…', max - 3, max - 2, max - 1, max]
-    return [1, '…', cur - 1, cur, cur + 1, '…', max]
-  }
-  const pages = makePages(current, last)
-
-  const goto = (page) => {
-    router.get('/attendance', { q, from, to, branch_id: branch, page }, {
-      preserveState: true, preserveScroll: true, replace: true
-    })
-  }
-
-  // ===== Confirm export =====
   const confirmExport = async (fmt) => {
     const nice = { csv: 'CSV', xlsx: 'Excel', pdf: 'PDF' }[fmt] || fmt.toUpperCase()
     try {
       const Swal = (await import('sweetalert2')).default
+      const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
       const res = await Swal.fire({
         icon: 'question',
         title: 'Export confirmation',
         html: `
           <div style="text-align:left">
             <div><b>Format:</b> ${nice}</div>
-            <div><b>Rows:</b> ${total.toLocaleString('en-US')}</div>
+            <div><b>Rows:</b> ${totalRows.toLocaleString('en-US')}</div>
             <div><b>Period:</b> ${from} → ${to}</div>
             ${q ? `<div><b>Search:</b> ${q}</div>` : ''}
           </div>
@@ -106,38 +124,56 @@ export default function Index({ rows, filters }) {
       })
       if (res.isConfirmed) window.location.href = exportUrl(fmt)
     } catch {
-      if (window.confirm(`You’re about to export ${total} row(s)\nfor Period ${from} → ${to}, as ${nice}.\nProceed?`)) {
+      const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
+      if (window.confirm(`You’re about to export ${totalRows} row(s)\nfor Period ${from} → ${to}, as ${nice}.\nProceed?`)) {
         window.location.href = exportUrl(fmt)
       }
     }
   }
 
-  // ===== Group per employee + monthly totals (OT & BSOTT) =====
+  // Pagination
+  const current = rows?.current_page ?? rows?.meta?.current_page ?? 1
+  const last = rows?.last_page ?? rows?.meta?.last_page ?? 1
+  const total = rows?.total ?? rows?.meta?.total ?? 0
+  const makePages = (cur, max) => {
+    if (max <= 7) return Array.from({ length: max }, (_, i) => i + 1)
+    if (cur <= 4) return [1, 2, 3, 4, '…', max]
+    if (cur >= max - 3) return [1, '…', max - 3, max - 2, max - 1, max]
+    return [1, '…', cur - 1, cur, cur + 1, '…', max]
+  }
+  const pages = makePages(current, last)
+  const goto = (page) => {
+    router.get(
+      '/attendance',
+      { q, from, to, branch_id: branch, per_page: perPage, page },
+      { preserveState: true, preserveScroll: true, replace: true }
+    )
+  }
+
+  // Group per employee (akumulasi OT, total harian, presence, simpan BPJS)
   const groups = useMemo(() => {
-    const map = new Map()
-    const order = []
+    const map = new Map(), order = []
     data.forEach((r, idx) => {
       const key = `${r.employee_id ?? ''}::${r.full_name ?? ''}`
       if (!map.has(key)) {
         map.set(key, {
-          key,
-          employee_id: r.employee_id,
-          name: r.full_name,
-          firstIndex: idx,
-          items: [],
-          monthlyOt: 0,
-          monthlyBsott: 0,
+          key, employee_id: r.employee_id, name: r.full_name, firstIndex: idx,
+          items: [], monthlyOt: 0, monthlyBsott: 0,
+          monthlyPresence: 0,
+          bpjsTk: safeNum(r.bpjs_tk_deduction),
+          bpjsKes: safeNum(r.bpjs_kes_deduction),
         })
         order.push(key)
       }
       const g = map.get(key)
       g.items.push(r)
-      const base = calcDailyTotal(r.real_work_hour)
-      const ot = Number(r.overtime_total_amount || 0)
-      g.monthlyOt += ot
-      g.monthlyBsott += base + ot
+      g.monthlyOt += otTotal(r)
+      g.monthlyBsott += totalSalary(r)
+      g.monthlyPresence += presenceDaily(r)
+      if (!g.bpjsTk) g.bpjsTk = safeNum(r.bpjs_tk_deduction)
+      if (!g.bpjsKes) g.bpjsKes = safeNum(r.bpjs_kes_deduction)
     })
-    return order.map((k) => map.get(k))
+    return order.map(k => map.get(k))
   }, [data])
 
   return (
@@ -181,7 +217,7 @@ export default function Index({ rows, filters }) {
               <button onClick={() => confirmExport('pdf')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
             </div>
 
-            {/* Logout icon (merah) */}
+            {/* Logout */}
             <Link
               href="/logout"
               method="post"
@@ -297,85 +333,173 @@ export default function Index({ rows, filters }) {
           </div>
         </form>
 
-        {/* Table (Desktop) — overflow aman + kolom uang lebih lega */}
-        <div className="hidden md:block bg-white rounded-2xl shadow border border-sky-200 overflow-hidden">
-          <table className="w-full text-xs md:text-sm table-fixed">
+        {/* TABLE — tampilkan SEMUA kolom, bisa di-geser */}
+        <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
+          <table className="min-w-[2350px] text-xs md:text-sm table-fixed">
             <colgroup>
-              <col className="w-[6rem]" />    {/* Date */}
-              <col className="w-[6rem]" />    {/* Employee ID */}
-              <col />                          {/* Name (flex) */}
-              <col className="w-[5rem]" />  {/* In */}
-              <col className="w-[5rem]" />  {/* Out */}
-              <col className="w-[6rem]" />  {/* Work Hours */}
-              <col className="w-[5.5rem]" />  {/* Basic Salary */}
-              <col className="w-[5rem]" />  {/* OT Hours */}
-              <col className="w-[6rem]" />    {/* OT 1 */}
-              <col className="w-[6rem]" />    {/* OT 2 */}
-              <col className="w-[6rem]" />    {/* OT Total */}
-              <col className="w-[7rem]" />    {/* Total Salary */}
+              {/* identitas → absensi → lembur → presence → shift → employee detail → audit */}
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+
+              <col className="w-[5rem]" />
+              <col className="w-[5rem]" />
+              <col className="w-[6rem]" />
+
+              <col className="w-[5rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[8rem]" />
+
+              <col className="w-[7rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[10rem]" />
+              <col className="w-[7rem]" />
+
+              <col className="w-[7rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[7rem]" />
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
               <tr>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Date</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Employee ID</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Name</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">In</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Out</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">Work Hours</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">Basic Salary</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-center">OT Hours</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT 1 (1.5×)</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT 2 (2×)</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">OT Total</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 whitespace-nowrap text-right">Total Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Date</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">User ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Employee ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Name</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Work Hours</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">OT Hours</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT 1 (1.5×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT 2 (2×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT Total</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Presence Daily</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Branch ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Branch Name</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Shift</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Code</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Holiday</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Gender</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Org ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Organization</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Job Pos ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Job Position</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Job Level ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Job Level</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Hourly Rate</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Billable H</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Basic Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Daily Total</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Tenure ≥1y</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={12}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={30}>No data</td></tr>
               )}
 
               {groups.map((g) => (
                 <React.Fragment key={g.key}>
                   {g.items.map((r) => {
-                    const base = calcDailyTotal(r.real_work_hour)
-                    const ot = Number(r.overtime_total_amount || 0)
-                    const bsott = base + ot
+                    const base = baseSalary(r)
+                    const ot   = otTotal(r)
+                    const prem = presenceDaily(r)
+                    const totalDay = totalSalary(r)
                     return (
                       <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
-                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.schedule_date}</td>
+                        {/* Identitas / Absensi utama */}
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.user_id ?? '-'}</td>
                         <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <div className="truncate text-center">{r.full_name}</div>
-                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
+
                         <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${r.real_work_hour >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
-                            {r.real_work_hour} h
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
+                            {safeNum(r.real_work_hour)} h
                           </span>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap font-semibold text-slate-800 text-right tabular-nums">{fmtIDR(base)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap text-center">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{r.overtime_hours} h</span>
-                        </td>
+
+                        {/* Lembur (Rp) */}
+                        <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{safeNum(r.overtime_hours)} h</span></td>
                         <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
                         <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
                         <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-extrabold text-slate-800 text-right tabular-nums">{fmtIDR(bsott)}</td>
+                        {/* Presence harian */}
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
+
+                        {/* Shift / Absensi metadata */}
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.branch_id}</td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.branch_name ?? '-'}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.shift_name ?? '-'}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.attendance_code ?? '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.holiday, 'Yes', 'No')}</td>
+
+                        {/* Employee detail */}
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.organization_id ?? '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_position_id ?? '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_level_id ?? '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_level ?? '-'}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
+
+                        {/* Audit / Kalkulasi harian tersimpan */}
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(base)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-bold">{fmtIDR(totalDay)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.tenure_ge_1y, 'Yes', 'No')}</td>
                       </tr>
                     )
                   })}
 
-                  {/* Subtotal per employee */}
+                  {/* Subtotal per employee (ASLI — tetap, tidak dihapus) */}
                   <tr className="bg-amber-50/60">
-                    <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={10}>
-                      Grand Total
+                    <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={22}>
+                      Grand Total ({g.name})
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-right tabular-nums">{fmtIDR(g.monthlyOt)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap font-extrabold text-amber-700 text-right tabular-nums">{fmtIDR(g.monthlyBsott)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                      OT: {fmtIDR(g.monthlyOt)}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                      Daily Total: {fmtIDR(g.monthlyBsott)}
+                    </td>
+                  </tr>
+
+                  {/* Subtotal TAMBAHAN untuk Presence & BPJS (baris baru) */}
+                  <tr className="bg-emerald-50/50">
+                    <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={30}>
+                      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
+                        <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(g.monthlyPresence)}</b></span>
+                        <span>BPJS TK: <b>{fmtIDR(g.bpjsTk)}</b></span>
+                        <span>BPJS Kesehatan: <b>{fmtIDR(g.bpjsKes)}</b></span>
+                      </div>
+                    </td>
                   </tr>
                 </React.Fragment>
               ))}
@@ -402,52 +526,47 @@ export default function Index({ rows, filters }) {
           {groups.map((g) => (
             <div key={g.key} className="space-y-3">
               {g.items.map((r) => {
-                const base = calcDailyTotal(r.real_work_hour)
-                const ot = Number(r.overtime_total_amount || 0)
-                const bsott = base + ot
+                const base = baseSalary(r)
+                const ot = otTotal(r)
+                const bsott = totalSalary(r)
+                const prem = presenceDaily(r)
                 return (
                   <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold">{r.schedule_date}</div>
+                        <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
                         <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
                         <div className="text-base font-semibold truncate">{r.full_name}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-xs text-slate-500">OT Total</div>
-                        <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
-                        <div className="text-xs text-slate-500 mt-1">Total Salary</div>
+                        <div className="text-xs text-slate-500">Daily Total</div>
                         <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
+                        <div className="text-xs text-slate-500 mt-1">OT Total</div>
+                        <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
                       </div>
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                       <div className="rounded-lg bg-sky-50 px-2 py-2">In<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_in)}</span></div>
                       <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
-                      <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{r.real_work_hour} h</span></div>
-                      <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{r.overtime_hours} h</span></div>
+                      <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{safeNum(r.real_work_hour)} h</span></div>
+                      <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{safeNum(r.overtime_hours)} h</span></div>
                       <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
                       <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(r.overtime_first_amount)} • {fmtIDR(r.overtime_second_amount)}</span></div>
+                      <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
+                    </div>
+
+                    <div className="mt-3 text-[11px] text-slate-600">
+                      <div><b>Branch:</b> {r.branch_name ?? '-'}</div>
+                      <div><b>Shift:</b> {r.shift_name ?? '-'}</div>
+                      <div><b>Gender:</b> {r.gender ?? '-'}</div>
+                      <div><b>Org:</b> {r.organization_name ?? '-'}</div>
+                      <div><b>Job:</b> {r.job_position ?? '-'} — {r.job_level ?? '-'}</div>
+                      <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
                     </div>
                   </div>
                 )
               })}
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <div className="grid grid-cols-2 gap-3 items-end">
-                  <div>
-                    <div className="text-xs text-amber-700/80">Grand Total OT</div>
-                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyOt)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-amber-700/80">Total Salary</div>
-                    <div className="text-lg font-extrabold text-amber-700">{fmtIDR(g.monthlyBsott)}</div>
-                  </div>
-                </div>
-                <div className="mt-2 text-right text-xs text-slate-500">
-                  <div>{from} → {to}</div>
-                  {g.employee_id && <div>Emp: {g.employee_id}</div>}
-                </div>
-              </div>
             </div>
           ))}
         </div>
