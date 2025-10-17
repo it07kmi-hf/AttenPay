@@ -8,14 +8,14 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [branch, setBranch] = useState(filters.branch_id)
-  const [perPage] = useState(filters.per_page || 10) // tetap mengikuti controller
+  const [perPage] = useState(10) // fixed 10
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileExportOpen, setMobileExportOpen] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
+  const searchDelayMs = 500
   const _searchTimer = React.useRef(null)
 
-  // debounce search
   React.useEffect(() => {
     if (_searchTimer.current) clearTimeout(_searchTimer.current)
     _searchTimer.current = setTimeout(() => {
@@ -25,7 +25,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
         { preserveState: true, replace: true, preserveScroll: true, only: ['rows','filters','employeeTotals'] }
       )
       setIsSearching(false)
-    }, 500)
+    }, searchDelayMs)
     return () => { if (_searchTimer.current) clearTimeout(_searchTimer.current) }
   }, [q])
 
@@ -49,26 +49,36 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   )
   const fmtDate = (v) => (v ? String(v).substring(0,10) : '-')
 
-  // ===== worked guard (kunci masalahmu) =====
-  const isWorked = (r) => safeNum(r.real_work_hour) > 0
+  // bersihkan cabang
+  const cleanBranchName = (name) => {
+    if (!name) return '-'
+    return String(name).split(/\s[–—-]\s/)[0]
+  }
 
-  // ===== Perhitungan (ikut guard worked) =====
+  // ===== Perhitungan =====
   const FALLBACK_RATE = Number(fallbackRate || 28153)
   const hourlyRate = (r) => {
     const n = Number(r.hourly_rate_used)
     return Number.isFinite(n) && n > 0 ? n : FALLBACK_RATE
   }
   const billableHours = (r) => {
-    if (!isWorked(r)) return 0
     if (r.daily_billable_hours !== undefined && r.daily_billable_hours !== null) {
       return Math.max(0, safeNum(r.daily_billable_hours))
     }
     return Math.min(7, Math.max(0, safeNum(r.real_work_hour)))
   }
-  const baseSalary = (r) => isWorked(r) ? Math.round(billableHours(r) * hourlyRate(r)) : 0
-  const otTotal = (r) => isWorked(r) ? safeNum(r.overtime_total_amount) : 0
-  const presenceDaily = (r) => isWorked(r) ? safeNum(r.presence_premium_daily) : 0
-  const totalSalary = (r) => isWorked(r) ? (baseSalary(r) + otTotal(r)) : 0
+  const baseSalary = (r) => Math.round(billableHours(r) * hourlyRate(r))
+  const otTotal = (r) => safeNum(r.overtime_total_amount)
+  const presenceDaily = (r) => safeNum(r.presence_premium_daily)
+  const totalSalary = (r) => {
+    const d = r.daily_total_amount
+    if (d !== undefined && d !== null && Number.isFinite(Number(d))) return Number(d)
+    return baseSalary(r) + otTotal(r)
+  }
+
+  // NEW: definisi absen → angka tampil 0 (bukan "-")
+  const isAbsent = (r) =>
+    !r.clock_in && !r.clock_out && safeNum(r.real_work_hour) === 0
 
   // Actions
   const search = (e) => {
@@ -79,7 +89,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   }
   const resetFilters = (e) => {
     e.preventDefault()
-    router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, { replace: true, preserveScroll: true })
+    router.get('/attendance', { q: '', branch_id: branch, per_page: perPage }, {
+      replace: true, preserveScroll: true
+    })
   }
 
   // Export
@@ -91,15 +103,21 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
       const Swal = (await import('sweetalert2')).default
       const totalRows = (rows?.total ?? rows?.meta?.total ?? 0)
       const res = await Swal.fire({
-        icon: 'question', title: 'Export confirmation',
-        html: `<div style="text-align:left">
-          <div><b>Format:</b> ${nice}</div>
-          <div><b>Rows:</b> ${totalRows.toLocaleString('en-US')}</div>
-          <div><b>Period:</b> ${from} → ${to}</div>
-          ${q ? `<div><b>Search:</b> ${q}</div>` : ''}
-        </div>`,
-        showCancelButton: true, confirmButtonText: 'Yes, export',
-        cancelButtonText: 'Cancel', confirmButtonColor: '#0284c7', focusCancel: true,
+        icon: 'question',
+        title: 'Export confirmation',
+        html: `
+          <div style="text-align:left">
+            <div><b>Format:</b> ${nice}</div>
+            <div><b>Rows:</b> ${totalRows.toLocaleString('en-US')}</div>
+            <div><b>Period:</b> ${from} → ${to}</div>
+            ${q ? `<div><b>Search:</b> ${q}</div>` : ''}
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Yes, export',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#0284c7',
+        focusCancel: true,
       })
       if (res.isConfirmed) window.location.href = exportUrl(fmt)
     } catch {
@@ -127,10 +145,10 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
     })
   }
 
-  // Totals map dari server
+  // Totals map
   const totalsMap = useMemo(() => employeeTotals || {}, [employeeTotals])
 
-  // Group per employee (akumulasi hanya untuk worked days)
+  // Group per employee
   const groups = useMemo(() => {
     const map = new Map(), order = []
     data.forEach((r, idx) => {
@@ -145,11 +163,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
       }
       const g = map.get(key)
       g.items.push(r)
-      if (isWorked(r)) {
-        g.monthlyOt       += otTotal(r)
-        g.monthlyBsott    += totalSalary(r)
-        g.monthlyPresence += presenceDaily(r)
-      }
+      g.monthlyOt += otTotal(r)
+      g.monthlyBsott += totalSalary(r)
+      g.monthlyPresence += presenceDaily(r)
       if (!g.bpjsTk) g.bpjsTk = safeNum(r.bpjs_tk_deduction)
       if (!g.bpjsKes) g.bpjsKes = safeNum(r.bpjs_kes_deduction)
     })
@@ -168,9 +184,14 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 md:py-4 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-4 sm:gap-5">
             <div className="h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-full bg-white p-1 ring-1 ring-white/50 shadow-sm">
-              <img src={LOGO_KMI} alt="KMI Logo" className="h-full w-full object-contain"
-                   loading="eager" decoding="async"
-                   onError={(e) => (e.currentTarget.style.display = 'none')} />
+              <img
+                src={LOGO_KMI}
+                alt="KMI Logo"
+                className="h-full w-full object-contain"
+                loading="eager"
+                decoding="async"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold truncate">Attendance Payroll System</h1>
@@ -178,7 +199,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
             </div>
           </div>
 
-          {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="flex overflow-hidden rounded-lg border border-white/30">
               <button onClick={() => confirmExport('csv')} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25">CSV</button>
@@ -187,7 +207,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
             </div>
 
             <Link href="/logout" method="post" as="button" aria-label="Logout"
-                  className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                    fill="none" stroke="currentColor" strokeWidth="1.8"
                    className="h-5 w-5 text-red-400 hover:text-red-500 transition-colors">
@@ -199,7 +219,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
             </Link>
           </div>
 
-          {/* Mobile actions */}
           <div className="md:hidden flex items-center gap-2 shrink-0">
             <button onClick={() => setMobileFiltersOpen(v => !v)} className="px-2.5 py-1.5 text-sm bg-white/15 hover:bg-white/25 border border-white/30 rounded-md">Filters</button>
             <div className="relative">
@@ -214,7 +233,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
             </div>
 
             <Link href="/logout" method="post" as="button" aria-label="Logout"
-                  className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
+              className="p-2 rounded-md border border-white/40 bg-white/10 hover:bg-white/20" title="Logout">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                    fill="none" stroke="currentColor" strokeWidth="1.8"
                    className="h-5 w-5 text-red-400 hover:text-red-500">
@@ -242,7 +261,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-5 space-y-6">
-        {/* Filters (Desktop) */}
+        {/* Filters */}
         <form onSubmit={search} className="hidden md:block bg-white rounded-xl shadow border border-sky-200 p-3 md:p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div className="md:col-span-2">
@@ -274,52 +293,56 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
           <table className="min-w-[2100px] text-xs md:text-sm table-fixed">
             <colgroup>
-              <col className="w-[7rem]" />   {/* Date */}
-              <col className="w-[7rem]" />   {/* Employee ID */}
-              <col className="w-[12rem]" />  {/* Name */}
-              <col className="w-[6rem]" />   {/* Gender */}
-              <col className="w-[8rem]" />   {/* Join Date */}
-              <col className="w-[14rem]" />  {/* Branch Name */}
-              <col className="w-[14rem]" />  {/* Organization */}
-              <col className="w-[12rem]" />  {/* Job Position */}
-              <col className="w-[6rem]" />   {/* In */}
-              <col className="w-[6rem]" />   {/* Out */}
-              <col className="w-[7rem]" />   {/* Work Hours */}
-              <col className="w-[6.5rem]" /> {/* OT Hours */}
-              <col className="w-[8rem]" />   {/* OT 1 */}
-              <col className="w-[8rem]" />   {/* OT 2 */}
-              <col className="w-[8rem]" />   {/* OT Total */}
-              <col className="w-[8rem]" />   {/* Presence */}
-              <col className="w-[8rem]" />   {/* Hourly Rate */}
-              <col className="w-[6.5rem]" /> {/* Billable H */}
-              <col className="w-[9rem]" />   {/* Basic Salary */}
-              <col className="w-[9rem]" />   {/* Daily Total */}
-              <col className="w-[7rem]" />   {/* Tenure */}
+              <col className="w-[7rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[14rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[7rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[8rem]" />
+              <col className="w-[6.5rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[7rem]" />
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
               <tr>
-                <th className="px-3 py-3 text-center">Date</th>
-                <th className="px-3 py-3 text-center">Employee ID</th>
-                <th className="px-3 py-3">Name</th>
-                <th className="px-3 py-3 text-center">Gender</th>
-                <th className="px-3 py-3 text-center">Join Date</th>
-                <th className="px-3 py-3">Branch Name</th>
-                <th className="px-3 py-3">Organization</th>
-                <th className="px-3 py-3">Job Position</th>
-                <th className="px-3 py-3 text-center">In</th>
-                <th className="px-3 py-3 text-center">Out</th>
-                <th className="px-3 py-3 text-center">Work Hours</th>
-                <th className="px-3 py-3 text-center">OT Hours</th>
-                <th className="px-3 py-3 text-right">OT 1 (1.5×)</th>
-                <th className="px-3 py-3 text-right">OT 2 (2×)</th>
-                <th className="px-3 py-3 text-right">OT Total</th>
-                <th className="px-3 py-3 text-right">Presence Daily</th>
-                <th className="px-3 py-3 text-right">Hourly Rate</th>
-                <th className="px-3 py-3 text-center">Billable H</th>
-                <th className="px-3 py-3 text-right">Basic Salary</th>
-                <th className="px-3 py-3 text-right">Daily Total</th>
-                <th className="px-3 py-3 text-center">Tenure ≥1y</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Date</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Employee ID</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Name</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Gender</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Branch Name</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Organization</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Job Position</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Work Hours</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">OT Hours</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT 1 (1.5×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT 2 (2×)</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT Total</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Presence Daily</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Hourly Rate</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Billable H</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Basic Salary</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-right">Daily Total</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Tenure ≥1y</th>
               </tr>
             </thead>
 
@@ -339,48 +362,56 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                 return (
                   <React.Fragment key={g.key}>
                     {g.items.map((r) => {
-                      const worked = isWorked(r)
-                      const base = baseSalary(r)
-                      const ot   = otTotal(r)
-                      const prem = presenceDaily(r)
-                      const totalDay = totalSalary(r)
+                      const absent = isAbsent(r)
+
+                      const workH   = absent ? 0 : safeNum(r.real_work_hour)
+                      const otH     = absent ? 0 : safeNum(r.overtime_hours)
+                      const ot1     = absent ? 0 : safeNum(r.overtime_first_amount)
+                      const ot2     = absent ? 0 : safeNum(r.overtime_second_amount)
+                      const otTot   = absent ? 0 : safeNum(r.overtime_total_amount)
+                      const prem    = absent ? 0 : presenceDaily(r)
+                      const rate    = absent ? 0 : hourlyRate(r)
+                      const billH   = absent ? 0 : billableHours(r)
+                      const base    = absent ? 0 : Math.round(billH * rate)
+                      const daily   = absent ? 0 : totalSalary(r)
 
                       return (
                         <tr key={r.id} className="odd:bg-white even:bg-slate-50 hover:bg-sky-50">
+                          {/* Identitas */}
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{fmtDate(r.schedule_date)}</td>
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
 
+                          {/* Meta */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.branch_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{cleanBranchName(r.branch_name)}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
 
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{worked ? fmtTime(r.clock_in)  : '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{worked ? fmtTime(r.clock_out) : '-'}</td>
+                          {/* Absensi */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">
-                            {worked ? (
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
-                                {safeNum(r.real_work_hour)} h
-                              </span>
-                            ) : '–'}
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${workH >= 7 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                              {workH} h
+                            </span>
                           </td>
 
+                          {/* Lembur */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">
-                            {worked ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{safeNum(r.overtime_hours)} h</span> : '–'}
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{otH} h</span>
                           </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{worked ? fmtIDR(r.overtime_first_amount)  : '–'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{worked ? fmtIDR(r.overtime_second_amount) : '–'}</td>
-                          <td className={`px-3 py-2 whitespace-nowrap font-bold text-right tabular-nums ${worked && ot>0 ? 'text-emerald-700':'text-slate-500'}`}>
-                            {worked ? fmtIDR(ot) : '–'}
-                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot1)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(ot2)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-bold text-right tabular-nums">{fmtIDR(otTot)}</td>
 
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{worked ? fmtIDR(prem) : '–'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{worked ? fmtIDR(hourlyRate(r)) : '–'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{worked ? billableHours(r) : '–'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{worked ? fmtIDR(base) : '–'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-bold">{worked ? fmtIDR(totalDay) : '–'}</td>
+                          {/* Presence & Kalkulasi */}
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(rate)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{billH}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(base)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-bold">{fmtIDR(daily)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.tenure_ge_1y, 'Yes', 'No')}</td>
                         </tr>
                       )
@@ -392,19 +423,20 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                         Grand Total ({g.name})
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
-                        OT: {fmtIDR(totalMonthlyOT)}
+                        OT: {fmtIDR((totalsMap?.[g.employee_id]?.monthly_ot ?? g.monthlyOt))}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
-                        Daily Total: {fmtIDR(totalMonthlyBsott)}
+                        Daily Total: {fmtIDR((totalsMap?.[g.employee_id]?.monthly_bsott ?? g.monthlyBsott))}
                       </td>
                     </tr>
 
+                    {/* Presence & BPJS */}
                     <tr className="bg-emerald-50/50">
                       <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={21}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
-                          <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
-                          <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
-                          <span>BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></span>
+                          <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR((totalsMap?.[g.employee_id]?.monthly_presence ?? g.monthlyPresence))}</b></span>
+                          <span>BPJS TK: <b>{fmtIDR((totalsMap?.[g.employee_id]?.bpjs_tk ?? g.bpjsTk))}</b></span>
+                          <span>BPJS Kesehatan: <b>{fmtIDR((totalsMap?.[g.employee_id]?.bpjs_kes ?? g.bpjsKes))}</b></span>
                         </div>
                       </td>
                     </tr>
@@ -427,6 +459,70 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
             )}
             <button onClick={() => goto(Math.min(last, current + 1))} disabled={current === last} className={`px-3 py-1 rounded border ${current === last ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50'}`}>Next</button>
           </div>
+        </div>
+
+        {/* Cards (Mobile) */}
+        <div className="md:hidden space-y-3">
+          {groups.map((g) => {
+            const serverTotal = totalsMap?.[g.employee_id] || null
+            const totalMonthlyOT = serverTotal?.monthly_ot ?? g.monthlyOt
+            const totalMonthlyBsott = serverTotal?.monthly_bsott ?? g.monthlyBsott
+            const totalMonthlyPresence = serverTotal?.monthly_presence ?? g.monthlyPresence
+            const bpjsTk = serverTotal?.bpjs_tk ?? g.bpjsTk
+            const bpjsKes = serverTotal?.bpjs_kes ?? g.bpjsKes
+
+            return (
+              <div key={g.key} className="space-y-3">
+                {g.items.map((r) => {
+                  const absent = isAbsent(r)
+
+                  const workH   = absent ? 0 : safeNum(r.real_work_hour)
+                  const otH     = absent ? 0 : safeNum(r.overtime_hours)
+                  const ot1     = absent ? 0 : safeNum(r.overtime_first_amount)
+                  const ot2     = absent ? 0 : safeNum(r.overtime_second_amount)
+                  const otTot   = absent ? 0 : safeNum(r.overtime_total_amount)
+                  const prem    = absent ? 0 : presenceDaily(r)
+                  const rate    = absent ? 0 : hourlyRate(r)
+                  const billH   = absent ? 0 : billableHours(r)
+                  const base    = absent ? 0 : Math.round(billH * rate)
+                  const daily   = absent ? 0 : totalSalary(r)
+
+                  return (
+                    <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
+                      <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
+                      <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
+                      <div className="text-base font-semibold truncate">{r.full_name}</div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+                        <div><b>Gender:</b> {r.gender ?? '-'}</div>
+                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
+                        <div className="col-span-2"><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
+                        <div className="col-span-2"><b>Organization:</b> {r.organization_name ?? '-'}</div>
+                        <div className="col-span-2"><b>Job Position:</b> {r.job_position ?? '-'}</div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-lg bg-sky-50 px-2 py-2">In<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_in)}</span></div>
+                        <div className="rounded-lg bg-sky-50 px-2 py-2">Out<br /><span className="font-semibold text-sky-700">{fmtTime(r.clock_out)}</span></div>
+                        <div className="rounded-lg bg-emerald-50 px-2 py-2">Work Hours<br /><span className="font-semibold text-emerald-700">{workH} h</span></div>
+                        <div className="rounded-lg bg-blue-50 px-2 py-2">OT Hours<br /><span className="font-semibold text-blue-700">{otH} h</span></div>
+                        <div className="rounded-lg bg-amber-50 px-2 py-2 col-span-2">Basic Salary<br /><span className="font-semibold text-amber-700">{fmtIDR(base)}</span></div>
+                        <div className="rounded-lg bg-amber-50/60 px-2 py-2 col-span-2">OT 1 / OT 2<br /><span className="font-semibold text-amber-700">{fmtIDR(ot1)} • {fmtIDR(ot2)}</span></div>
+                        <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
+                        <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Daily Total<br /><span className="font-semibold text-emerald-700">{fmtIDR(daily)}</span></div>
+                      </div>
+
+                      <div className="mt-3 text-[11px] text-emerald-800 border-t pt-2">
+                        <div><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></div>
+                        <div>OT: <b>{fmtIDR(totalMonthlyOT)}</b> • Daily Total: <b>{fmtIDR(totalMonthlyBsott)}</b></div>
+                        <div>BPJS TK: <b>{fmtIDR(bpjsTk)}</b> • BPJS Kesehatan: <b>{fmtIDR(bpjsKes)}</b></div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
       </main>
     </div>

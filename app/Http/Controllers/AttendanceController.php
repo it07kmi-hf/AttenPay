@@ -13,7 +13,6 @@ class AttendanceController extends Controller
 {
     private const FALLBACK_RATE = 28153;
 
-    /** Agregat per karyawan untuk seluruh hasil filter (bukan per halaman). */
     private function buildEmployeeTotals($baseQuery): array
     {
         $rows = (clone $baseQuery)->select([
@@ -24,7 +23,6 @@ class AttendanceController extends Controller
         ])->orderBy('employee_id','asc')->get();
 
         $totals = [];
-
         foreach ($rows as $r) {
             $empId = (string)($r->employee_id ?? '');
             if ($empId === '') continue;
@@ -41,17 +39,6 @@ class AttendanceController extends Controller
                 ];
             }
 
-            // === HANYA hitung kalau worked (>0 jam) ===
-            $worked = (float)($r->real_work_hour ?? 0) > 0;
-            if (!$worked) {
-                // tetap isi BPJS satu kali kalau ada
-                $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
-                $kes = (float)($r->bpjs_kes_deduction ?? 0);
-                if ($totals[$empId]['bpjs_tk']  == 0 && $tk  > 0) $totals[$empId]['bpjs_tk']  = $tk;
-                if ($totals[$empId]['bpjs_kes'] == 0 && $kes > 0) $totals[$empId]['bpjs_kes'] = $kes;
-                continue;
-            }
-
             $otTot    = (float)($r->overtime_total_amount ?? 0);
             $presence = (float)($r->presence_premium_daily ?? 0);
 
@@ -65,14 +52,14 @@ class AttendanceController extends Controller
 
             $baseSalary = round($billable * $rate, 0);
 
-            // abaikan nilai daily_total_amount dari DB kalau worked dihitung manual
-            $totalDay = $baseSalary + $otTot;
+            $totalDay = is_null($r->daily_total_amount)
+                ? ($baseSalary + $otTot)
+                : (float)$r->daily_total_amount;
 
             $totals[$empId]['monthly_ot']       += $otTot;
             $totals[$empId]['monthly_bsott']    += $totalDay;
             $totals[$empId]['monthly_presence'] += $presence;
 
-            // BPJS: ambil nilai pertama non-zero
             $tk  = (float)($r->bpjs_tk_deduction  ?? 0);
             $kes = (float)($r->bpjs_kes_deduction ?? 0);
             if ($totals[$empId]['bpjs_tk']  == 0 && $tk  > 0) $totals[$empId]['bpjs_tk']  = $tk;
@@ -82,13 +69,10 @@ class AttendanceController extends Controller
         return $totals;
     }
 
-    /** List data. */
     public function index(Request $req)
     {
         $branch  = (int) $req->query('branch_id', 21089);
-
-        // biarkan seperti kodenya sekarang (kalau mau 35 tinggal ganti di sini)
-        $perPage = (int) $req->query('per_page', 10);
+        $perPage = 10;
 
         $tz         = 'Asia/Jakarta';
         $today      = now($tz)->toDateString();
@@ -129,18 +113,15 @@ class AttendanceController extends Controller
 
         $rows = $builder->paginate($perPage)->withQueryString();
 
-        // agregat global (untuk subtotal per karyawan)
         $baseQueryForAgg = Attendance::query()
             ->where('branch_id', $branch)
             ->whereBetween('schedule_date', [$from, $to]);
-
         if ($q !== '') {
             $baseQueryForAgg->where(function ($w) use ($q) {
                 $w->where('employee_id', 'like', $q.'%')
                   ->orWhere('full_name', 'like', $q.'%');
             });
         }
-
         $employeeTotals = $this->buildEmployeeTotals($baseQueryForAgg);
 
         return Inertia::render('Attendance/Index', [
@@ -157,7 +138,6 @@ class AttendanceController extends Controller
         ]);
     }
 
-    /** Export (tetap seperti sebelumnya). */
     public function export(Request $req)
     {
         $format = strtolower($req->query('format', 'csv'));
@@ -187,10 +167,20 @@ class AttendanceController extends Controller
             });
         }
 
-        $baseQuery->orderBy('schedule_date', 'asc')->orderBy('employee_id', 'asc');
+        $baseQuery->orderBy('schedule_date', 'asc')
+                  ->orderBy('employee_id', 'asc');
 
-        $meta = (clone $baseQuery)->reorder()->select('employee_id', 'full_name')->distinct()->limit(2)->get();
-        $nameSlug = $meta->count() === 1 ? Str::slug($meta[0]->full_name ?: 'unknown', '_') : 'all';
+        $meta = (clone $baseQuery)
+            ->reorder()
+            ->select('employee_id', 'full_name')
+            ->distinct()
+            ->limit(2)
+            ->get();
+
+        $nameSlug = $meta->count() === 1
+            ? Str::slug($meta[0]->full_name ?: 'unknown', '_')
+            : 'all';
+
         $filenameBase = "attendance_{$nameSlug}_{$branch}_{$from}_{$to}";
 
         if ($format === 'csv' || $format === 'xlsx') {
@@ -199,37 +189,50 @@ class AttendanceController extends Controller
                 'Content-Type'        => 'text/csv; charset=UTF-8',
                 'Content-Disposition' => 'attachment; filename="'.$filename.'"',
             ];
-            $columns = ['Date','Employee ID','Name','In','Out','Work Hours','OT Hours','OT 1 (1.5x)','OT 2 (2x)','OT Total','Presence Daily','Daily Total'];
-            $selectCols = ['schedule_date','employee_id','full_name','clock_in','clock_out','real_work_hour','overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount','presence_premium_daily','daily_total_amount'];
+
+            $columns = [
+                'Date','Employee ID','Name','In','Out',
+                'Work Hours','OT Hours','OT 1 (1.5x)','OT 2 (2x)','OT Total',
+                'Presence Daily','Daily Total',
+            ];
+
+            $selectCols = [
+                'schedule_date','employee_id','full_name','clock_in','clock_out',
+                'real_work_hour','overtime_hours','overtime_first_amount',
+                'overtime_second_amount','overtime_total_amount',
+                'presence_premium_daily','daily_total_amount',
+            ];
 
             $callback = function () use ($baseQuery, $columns, $selectCols) {
                 $out = fopen('php://output', 'w');
                 fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
                 fputcsv($out, $columns);
 
-                (clone $baseQuery)->select($selectCols)->chunk(2000, function ($chunk) use ($out) {
-                    foreach ($chunk as $r) {
-                        $otTot    = (int) ($r->overtime_total_amount ?? 0);
-                        $presence = (int) ($r->presence_premium_daily ?? 0);
-                        $daily    = is_null($r->daily_total_amount) ? 0 : (int) $r->daily_total_amount;
+                (clone $baseQuery)
+                    ->select($selectCols)
+                    ->chunk(2000, function ($chunk) use ($out) {
+                        foreach ($chunk as $r) {
+                            $otTot    = (int) ($r->overtime_total_amount ?? 0);
+                            $presence = (int) ($r->presence_premium_daily ?? 0);
+                            $daily    = is_null($r->daily_total_amount) ? 0 : (int) $r->daily_total_amount;
 
-                        fputcsv($out, [
-                            substr((string)$r->schedule_date, 0, 10),
-                            $r->employee_id,
-                            $r->full_name,
-                            $r->clock_in  ? substr((string)$r->clock_in,  0, 5) : '-',
-                            $r->clock_out ? substr((string)$r->clock_out, 0, 5) : '-',
-                            (float)($r->real_work_hour ?? 0),
-                            (float)($r->overtime_hours ?? 0),
-                            (float)($r->overtime_first_amount ?? 0),
-                            (float)($r->overtime_second_amount ?? 0),
-                            $otTot,
-                            $presence,
-                            $daily,
-                        ]);
-                    }
-                    if (function_exists('flush')) { flush(); }
-                });
+                            fputcsv($out, [
+                                substr((string)$r->schedule_date, 0, 10),
+                                $r->employee_id,
+                                $r->full_name,
+                                $r->clock_in  ? substr((string)$r->clock_in,  0, 5) : '-',
+                                $r->clock_out ? substr((string)$r->clock_out, 0, 5) : '-',
+                                (float)($r->real_work_hour ?? 0),
+                                (float)($r->overtime_hours ?? 0),
+                                (float)($r->overtime_first_amount ?? 0),
+                                (float)($r->overtime_second_amount ?? 0),
+                                $otTot,
+                                $presence,
+                                $daily,
+                            ]);
+                        }
+                        if (function_exists('flush')) { flush(); }
+                    });
 
                 fclose($out);
             };
