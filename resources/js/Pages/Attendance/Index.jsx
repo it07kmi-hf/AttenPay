@@ -61,7 +61,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
   // 🚿 Bersihkan branch name → ambil bagian sebelum " – ..."/" — ..."/"- ..."
   const cleanBranchName = (name) => {
     if (!name) return '-'
-    // pola: spasi + (–|—|-) + spasi diikuti apapun
     return String(name).split(/\s[–—-]\s/)[0]
   }
 
@@ -340,46 +339,39 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
           </div>
         </form>
 
-        {/* TABLE — tampilkan SEMUA kolom, bisa di-geser */}
+        {/* TABLE — kolom terpisah */}
         <div className="bg-white rounded-2xl shadow border border-sky-200 overflow-x-auto" role="region" aria-label="Attendance table" tabIndex={0}>
-          <table className="min-w-[2350px] text-xs md:text-sm table-fixed">
+          <table className="min-w-[2200px] text-xs md:text-sm table-fixed">
             <colgroup>
-              {/* identitas → absensi → lembur → presence → shift → employee detail → audit */}
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[12rem]" />
-
-              <col className="w-[5rem]" />
-              <col className="w-[5rem]" />
-              <col className="w-[6rem]" />
-
-              <col className="w-[5rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[8rem]" />
-
-              <col className="w-[7rem]" />
-              <col className="w-[14rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[6rem]" />
-
-              <col className="w-[7rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[12rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[12rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[10rem]" />
-              <col className="w-[7rem]" />
-
-              <col className="w-[7rem]" />
-              <col className="w-[6rem]" />
-              <col className="w-[8rem]" />
-              <col className="w-[9rem]" />
-              <col className="w-[7rem]" />
+              {/* 1-4: Identitas utama */}
+              <col className="w-[7rem]" />   {/* Date */}
+              <col className="w-[7rem]" />   {/* User ID */}
+              <col className="w-[7rem]" />   {/* Employee ID */}
+              <col className="w-[12rem]" />  {/* Name */}
+              {/* 5-9: Meta diminta user */}
+              <col className="w-[6rem]" />   {/* Gender */}
+              <col className="w-[14rem]" />  {/* Branch Name */}
+              <col className="w-[14rem]" />  {/* Organization */}
+              <col className="w-[12rem]" />  {/* Job Position */}
+              <col className="w-[8rem]" />   {/* Join Date */}
+              {/* 10-12: Absensi */}
+              <col className="w-[6rem]" />   {/* In */}
+              <col className="w-[6rem]" />   {/* Out */}
+              <col className="w-[7rem]" />   {/* Work Hours */}
+              {/* 13-16: Lembur */}
+              <col className="w-[6.5rem]" /> {/* OT Hours */}
+              <col className="w-[8rem]" />   {/* OT 1 */}
+              <col className="w-[8rem]" />   {/* OT 2 */}
+              <col className="w-[8rem]" />   {/* OT Total */}
+              {/* 17: Presence */}
+              <col className="w-[8rem]" />   {/* Presence Daily */}
+              {/* 18-21: Audit/kalkulasi */}
+              <col className="w-[8rem]" />   {/* Hourly Rate */}
+              <col className="w-[6.5rem]" /> {/* Billable H */}
+              <col className="w-[9rem]" />   {/* Basic Salary */}
+              <col className="w-[9rem]" />   {/* Daily Total */}
+              {/* 22: Tenure */}
+              <col className="w-[7rem]" />   {/* Tenure ≥1y */}
             </colgroup>
 
             <thead className="bg-gradient-to-r from-sky-100 via-blue-100 to-emerald-100 border-b border-sky-200">
@@ -388,6 +380,12 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">User ID</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Employee ID</th>
                 <th className="px-3 py-3 font-semibold text-sky-900">Name</th>
+
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Gender</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Branch Name</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Organization</th>
+                <th className="px-3 py-3 font-semibold text-sky-900">Job Position</th>
+                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
 
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">In</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Out</th>
@@ -399,21 +397,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                 <th className="px-3 py-3 font-semibold text-sky-900 text-right">OT Total</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-right">Presence Daily</th>
 
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Branch ID</th>
-                <th className="px-3 py-3 font-semibold text-sky-900">Branch Name</th>
-                <th className="px-3 py-3 font-semibold text-sky-900">Shift</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Code</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Holiday</th>
-
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Gender</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Org ID</th>
-                <th className="px-3 py-3 font-semibold text-sky-900">Organization</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Job Pos ID</th>
-                <th className="px-3 py-3 font-semibold text-sky-900">Job Position</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Job Level ID</th>
-                <th className="px-3 py-3 font-semibold text-sky-900">Job Level</th>
-                <th className="px-3 py-3 font-semibold text-sky-900 text-center">Join Date</th>
-
                 <th className="px-3 py-3 font-semibold text-sky-900 text-right">Hourly Rate</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-center">Billable H</th>
                 <th className="px-3 py-3 font-semibold text-sky-900 text-right">Basic Salary</th>
@@ -424,7 +407,7 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
             <tbody className="divide-y divide-gray-100">
               {data.length === 0 && (
-                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={30}>No data</td></tr>
+                <tr><td className="px-4 py-6 text-center text-gray-500" colSpan={22}>No data</td></tr>
               )}
 
               {groups.map((g) => {
@@ -451,6 +434,14 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                           <td className="px-3 py-2 whitespace-nowrap font-mono text-center">{r.employee_id}</td>
                           <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.full_name}</div></td>
 
+                          {/* Kolom baru (terpisah) */}
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{cleanBranchName(r.branch_name)}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
+                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
+
+                          {/* Absensi */}
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_in)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">
@@ -464,29 +455,9 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_first_amount)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(r.overtime_second_amount)}</td>
                           <td className={`px-3 py-2 whitespace-nowrap font-bold ${ot>0?'text-emerald-700':'text-slate-500'} text-right tabular-nums`}>{fmtIDR(ot)}</td>
-                          {/* ✅ Presence harian */}
+
+                          {/* Presence & audit */}
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(prem)}</td>
-
-                          {/* Shift / Absensi metadata */}
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.branch_id}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="truncate">{cleanBranchName(r.branch_name)}</div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.shift_name ?? '-'}</div></td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.attendance_code ?? '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtBoolBadge(!!r.holiday, 'Yes', 'No')}</td>
-
-                          {/* Employee detail */}
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.gender ?? '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.organization_id ?? '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.organization_name ?? '-'}</div></td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_position_id ?? '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_position ?? '-'}</div></td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{r.job_level_id ?? '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap"><div className="truncate">{r.job_level ?? '-'}</div></td>
-                          <td className="px-3 py-2 whitespace-nowrap text-center">{fmtDate(r.join_date)}</td>
-
-                          {/* Audit / Kalkulasi harian tersimpan */}
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(hourlyRate(r))}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">{billableHours(r)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums">{fmtIDR(base)}</td>
@@ -498,20 +469,21 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
 
                     {/* Subtotal per employee (tetap tampil sama di setiap halaman) */}
                     <tr className="bg-amber-50/60">
-                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={22}>
+                      {/* total 22 kolom → 16 + 3 + 3 */}
+                      <td className="px-3 py-2 text-amber-700 font-semibold whitespace-nowrap text-right pr-4" colSpan={16}>
                         Grand Total ({g.name})
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
                         OT: {fmtIDR(totalMonthlyOT)}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={4}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums font-extrabold text-amber-700" colSpan={3}>
                         Daily Total: {fmtIDR(totalMonthlyBsott)}
                       </td>
                     </tr>
 
                     {/* Presence & BPJS (pakai angka server) */}
                     <tr className="bg-emerald-50/50">
-                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={30}>
+                      <td className="px-3 py-2 whitespace-nowrap text-right tabular-nums" colSpan={22}>
                         <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-emerald-800">
                           <span><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></span>
                           <span>BPJS TK: <b>{fmtIDR(bpjsTk)}</b></span>
@@ -559,18 +531,16 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                   const prem = presenceDaily(r)
                   return (
                     <div key={r.id} className="bg-white rounded-2xl shadow border border-sky-200 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
-                          <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
-                          <div className="text-base font-semibold truncate">{r.full_name}</div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-xs text-slate-500">Daily Total</div>
-                          <div className="text-sm font-extrabold text-slate-800">{fmtIDR(bsott)}</div>
-                          <div className="text-xs text-slate-500 mt-1">OT Total</div>
-                          <div className={`text-sm font-bold ${ot>0?'text-emerald-700':'text-slate-600'}`}>{fmtIDR(ot)}</div>
-                        </div>
+                      <div className="text-sm font-semibold">{fmtDate(r.schedule_date)}</div>
+                      <div className="text-xs text-slate-500 font-mono">{r.employee_id}</div>
+                      <div className="text-base font-semibold truncate">{r.full_name}</div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+                        <div><b>Gender:</b> {r.gender ?? '-'}</div>
+                        <div><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
+                        <div className="col-span-2"><b>Organization:</b> {r.organization_name ?? '-'}</div>
+                        <div className="col-span-2"><b>Job Position:</b> {r.job_position ?? '-'}</div>
+                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -584,16 +554,6 @@ export default function Index({ rows, filters, employeeTotals = {}, fallbackRate
                         <div className="rounded-lg bg-emerald-50/60 px-2 py-2 col-span-2">Presence Daily<br /><span className="font-semibold text-emerald-700">{fmtIDR(prem)}</span></div>
                       </div>
 
-                      <div className="mt-3 text-[11px] text-slate-600">
-                        <div><b>Branch:</b> {cleanBranchName(r.branch_name)}</div>
-                        <div><b>Shift:</b> {r.shift_name ?? '-'}</div>
-                        <div><b>Gender:</b> {r.gender ?? '-'}</div>
-                        <div><b>Org:</b> {r.organization_name ?? '-'}</div>
-                        <div><b>Job:</b> {r.job_position ?? '-'} — {r.job_level ?? '-'}</div>
-                        <div><b>Join Date:</b> {fmtDate(r.join_date)}</div>
-                      </div>
-
-                      {/* Subtotal (ringkas) */}
                       <div className="mt-3 text-[11px] text-emerald-800 border-t pt-2">
                         <div><b>{g.name}</b> — Presence Monthly: <b>{fmtIDR(totalMonthlyPresence)}</b></div>
                         <div>OT: <b>{fmtIDR(totalMonthlyOT)}</b> • Daily Total: <b>{fmtIDR(totalMonthlyBsott)}</b></div>
