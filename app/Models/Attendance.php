@@ -22,8 +22,8 @@ class Attendance extends Model
         'join_date'     => 'date:Y-m-d',   // tanggal bergabung karyawan
 
         // ===== Boolean =====
-        'holiday'     => 'boolean',        // penanda tanggal merah/libur
-        'tenure_ge_1y'=> 'boolean',        // masa kerja >= 1 tahun pada schedule_date
+        'holiday'       => 'boolean',      // penanda tanggal merah/libur
+        'tenure_ge_1y'  => 'boolean',      // masa kerja >= 1 tahun pada schedule_date
 
         // ===== Numerik/Jam =====
         'real_work_hour'       => 'float',   // jam kerja real (angka desimal)
@@ -48,7 +48,25 @@ class Attendance extends Model
         'organization_id'  => 'integer',
         'job_position_id'  => 'integer',
         'job_level_id'     => 'integer',
+
+        // ===== Timeoff (izin/cuti) =====
+        'timeoff_id'       => 'string',
+        'timeoff_name'     => 'string',
     ];
+
+    /* =======================
+     *  Accessor bantu
+     * ======================= */
+    /**
+     * is_present: true jika ada clock_in & clock_out dan real_work_hour > 0
+     */
+    public function getIsPresentAttribute(): bool
+    {
+        $in  = trim((string)($this->clock_in ?? ''));
+        $out = trim((string)($this->clock_out ?? ''));
+        $hrs = (float)($this->real_work_hour ?? 0);
+        return $in !== '' && $out !== '' && $hrs > 0;
+    }
 
     /* =======================
      *  Query Scopes bantu
@@ -92,6 +110,29 @@ class Attendance extends Model
         });
     }
 
+    /** Filter hanya baris yang punya timeoff (izin/cuti) */
+    public function scopeHasTimeoff($query)
+    {
+        return $query->whereNotNull('timeoff_id')->where('timeoff_id', '!=', '');
+    }
+
+    /** Filter berdasarkan kode/ID timeoff tertentu */
+    public function scopeTimeoff($query, $timeoffId)
+    {
+        if (is_array($timeoffId)) {
+            return $query->whereIn('timeoff_id', $timeoffId);
+        }
+        return $query->where('timeoff_id', $timeoffId);
+    }
+
+    /** Filter baris tanpa timeoff (hadir/alpha tanpa data izin) */
+    public function scopeNoTimeoff($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereNull('timeoff_id')->orWhere('timeoff_id', '');
+        });
+    }
+
     /*
      * --- Alternatif: kalau lebih suka whitelist kolom, gunakan ini
      * (GANTI $guarded = [] di atas dengan $fillable berikut)
@@ -104,6 +145,9 @@ class Attendance extends Model
      *
      *   // absensi
      *   'clock_in','clock_out','real_work_hour','shift_name','attendance_code','holiday',
+     *
+     *   // timeoff
+     *   'timeoff_id','timeoff_name',
      *
      *   // lembur
      *   'overtime_hours','overtime_first_amount','overtime_second_amount','overtime_total_amount',

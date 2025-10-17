@@ -55,6 +55,38 @@ class MekariClient
         return null;
     }
 
+    /** Ambil timeoff_id dari beberapa kemungkinan field response */
+    private function pickTimeoffId(array $r): ?string
+    {
+        foreach ([
+            $r['timeoff_id'] ?? null,
+            $r['time_off_id'] ?? null,
+            $r['timeoff']['id'] ?? null,
+            $r['time_off']['id'] ?? null,
+            $r['leave']['id'] ?? null,
+        ] as $v) {
+            if ($v !== null && $v !== '') return (string)$v;
+        }
+        return null;
+    }
+
+    /** Ambil timeoff_name dari beberapa kemungkinan field response */
+    private function pickTimeoffName(array $r): ?string
+    {
+        foreach ([
+            $r['timeoff_name'] ?? null,
+            $r['time_off_name'] ?? null,
+            $r['timeoff']['name'] ?? null,
+            $r['time_off']['name'] ?? null,
+            $r['leave']['name'] ?? null,
+            $r['timeoff']['type'] ?? null,
+            $r['time_off']['type'] ?? null,
+        ] as $v) {
+            if ($v !== null && $v !== '') return (string)$v;
+        }
+        return null;
+    }
+
     /** Normalisasi gender ke 'Male' / 'Female' (kalau bisa) */
     private function normalizeGender(mixed $val): ?string
     {
@@ -64,7 +96,7 @@ class MekariClient
         }
         $s = strtolower(trim((string)$val));
         return match ($s) {
-            'male','m','l','pria','laki-laki' => 'Male',
+            'male','m','l','pria','laki-laki'     => 'Male',
             'female','f','p','wanita','perempuan' => 'Female',
             default => ucfirst($s),
         };
@@ -143,6 +175,10 @@ class MekariClient
                 $clockIn  = $this->timeOnly((string)($r['clock_in']  ?? ''));
                 $clockOut = $this->timeOnly((string)($r['clock_out'] ?? ''));
 
+                // ===== timeoff (izin/cuti) dari API =====
+                $timeoffId   = $this->pickTimeoffId($r);
+                $timeoffName = $this->pickTimeoffName($r);
+
                 $row = [
                     // summary dari endpoint attendance
                     'user_id'          => $uid,
@@ -156,6 +192,10 @@ class MekariClient
                     'shift_name'       => (string)($r['shift_name'] ?? ''),
                     'attendance_code'  => (string)($r['attendance_code'] ?? ''),
                     'holiday'          => (bool)($r['holiday'] ?? false),
+
+                    // timeoff
+                    'timeoff_id'       => $timeoffId,
+                    'timeoff_name'     => $timeoffName,
 
                     // placeholder detail (diisi di bawah)
                     'branch_name'       => null,

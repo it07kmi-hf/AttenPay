@@ -51,10 +51,16 @@ return new class extends Migration {
             /*
              |------------------------------------------------------------------
              | 3) Attendance meta (opsional tampilan/laporan)
+             |   + Penambahan timeoff_id & timeoff_name
              |------------------------------------------------------------------
              */
             $table->string('shift_name')->nullable()->comment('Nama shift');
             $table->string('attendance_code', 10)->nullable()->comment('Kode status absensi');
+
+            // ➕ kolom baru untuk alasan tidak masuk (izin/cuti)
+            $table->string('timeoff_id')->nullable()->comment('ID jenis izin/cuti (alasan tidak masuk)');
+            $table->string('timeoff_name')->nullable()->comment('Nama jenis izin/cuti');
+
             $table->boolean('holiday')->default(false)->comment('Penanda hari libur / tanggal merah');
 
             /*
@@ -96,7 +102,10 @@ return new class extends Migration {
             $table->index('organization_id', 'idx_att_org_id');
             $table->index('join_date', 'idx_att_join_date');
 
-            $table->comment('Snapshot absensi harian karyawan: identitas, organisasi, jam kerja, lembur, premi hadir & potongan BPJS.');
+            // index bantu untuk filter laporan berdasarkan alasan time off
+            $table->index('timeoff_id', 'idx_att_timeoff_id');
+
+            $table->comment('Snapshot absensi harian karyawan: identitas, organisasi, jam kerja, lembur, premi hadir, potongan BPJS, serta informasi izin/cuti.');
         });
     }
 

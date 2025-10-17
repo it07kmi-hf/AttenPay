@@ -67,7 +67,7 @@ class FetchAttendanceToday extends Command
             }
 
             foreach ($rows as $row) {
-                // 2) Hitung lembur/premi via service (kalau service belum lengkapi semua field, kita sediakan fallback di bawah)
+                // 2) Hitung lembur/premi via service
                 $row = $calc->apply($row);
 
                 // ---- Normalisasi & fallback kalkulasi yang wajib ada ----
@@ -106,7 +106,7 @@ class FetchAttendanceToday extends Command
                     'branch_id'     => (int)($row['branch_id'] ?? $branchId),
                 ];
 
-                // 4) Payload sesuai migration
+                // 4) Payload sesuai migration (+ timeoff_id & timeoff_name BARU)
                 $payload = [
                     // ===== IDENTITAS / EMPLOYEE =====
                     'user_id'            => $row['user_id'] ?? null,
@@ -130,6 +130,10 @@ class FetchAttendanceToday extends Command
                     'shift_name'         => $row['shift_name'] ?? null,
                     'attendance_code'    => $row['attendance_code'] ?? null,
                     'holiday'            => (bool)($row['holiday'] ?? false),
+
+                    // ===== TIMEOFF (BARU) =====
+                    'timeoff_id'         => $row['timeoff_id']   ?? null,
+                    'timeoff_name'       => $row['timeoff_name'] ?? null,
 
                     // ===== LEMBUR (RUPIAH) =====
                     'overtime_hours'         => (int)($row['overtime_hours'] ?? 0),
