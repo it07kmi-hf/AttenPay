@@ -42,13 +42,19 @@ export default function Login() {
         aria-hidden
       />
 
+      {/* Bottom gradient overlay to improve footer contrast */}
+      <div
+        className="fixed inset-x-0 bottom-0 h-40 -z-0 pointer-events-none bg-gradient-to-t from-black/40 via-black/10 to-transparent"
+        aria-hidden
+      />
+
       {/* Centered content */}
       <div className="relative min-h-dvh grid place-items-center p-4 sm:p-6">
         <div className="w-full max-w-[28rem] sm:max-w-md md:max-w-lg">
           <div className="rounded-2xl shadow-2xl border border-white/30 bg-white/60 backdrop-blur-md overflow-hidden">
             {/* Header */}
             <div className="px-5 sm:px-6 pt-7 sm:pt-8 pb-5 sm:pb-6 text-center bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white">
-              {/* ==== LOGO WRAPPER DENGAN BORDER PUTIH ==== */}
+              {/* Logo wrapper with white border */}
               <div className="mx-auto h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-white/20 grid place-items-center border-2 border-white shadow-lg">
                 {/* Logo image (public/img/logo-kmi.png). Fallback to "AP" if image fails. */}
                 {!logoError ? (
@@ -185,9 +191,11 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Footer */}
-          <p className="text-center text-[11px] sm:text-[12px] text-slate-700 mt-4">
-            © {new Date().getFullYear()} PT Kayu Mebel Indonesia — All Rights Reserved
+          {/* Footer - now visible with dark translucent pill */}
+          <p className="text-center text-[11px] sm:text-[12px] mt-4">
+            <span className="inline-block rounded-md bg-black/40 text-white px-2.5 py-1 backdrop-blur-sm">
+              © {new Date().getFullYear()} PT Kayu Mebel Indonesia — All Rights Reserved
+            </span>
           </p>
         </div>
       </div>
