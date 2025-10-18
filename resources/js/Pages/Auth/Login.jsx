@@ -180,7 +180,7 @@ export default function Login() {
               </form>
 
               {/* Centered seeded user box */}
-              <div className="mt-6 text-center">
+              {/* <div className="mt-6 text-center">
                 <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-lg bg-white/70 border border-white/60 px-3 py-2 text-xs sm:text-[13px] text-slate-700">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-sky-600" aria-hidden>
                     <path d="M12 5v6l4 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -207,7 +207,7 @@ export default function Login() {
                     ⧉
                   </button>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
 
