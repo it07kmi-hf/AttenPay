@@ -25,8 +25,6 @@ export default function Login() {
   const errorInput = 'border-red-300 bg-red-50/50'
   const normalInput = 'border-slate-300 bg-white/90'
 
-  const copy = async (txt) => { try { await navigator.clipboard.writeText(txt) } catch {} }
-
   return (
     <div
       className="relative overflow-hidden min-h-dvh"
@@ -37,11 +35,12 @@ export default function Login() {
         paddingRight: 'env(safe-area-inset-right)',
       }}
     >
-      {/* Gradient background */}
-      <div className="fixed inset-0 bg-gradient-to-br from-sky-200 via-indigo-200 to-emerald-200" aria-hidden />
-      {/* Soft blobs */}
-      <div className="fixed -top-28 -left-28 h-80 w-80 rounded-full bg-sky-400/30 blur-3xl" aria-hidden />
-      <div className="fixed -bottom-28 -right-28 h-80 w-80 rounded-full bg-emerald-400/30 blur-3xl" aria-hidden />
+      {/* Background image */}
+      <div
+        className="fixed inset-0 -z-10 bg-center bg-cover bg-no-repeat"
+        style={{ backgroundImage: "url('/img/bg-kmi.jpg')" }}
+        aria-hidden
+      />
 
       {/* Centered content */}
       <div className="relative min-h-dvh grid place-items-center p-4 sm:p-6">
@@ -49,7 +48,8 @@ export default function Login() {
           <div className="rounded-2xl shadow-2xl border border-white/30 bg-white/60 backdrop-blur-md overflow-hidden">
             {/* Header */}
             <div className="px-5 sm:px-6 pt-7 sm:pt-8 pb-5 sm:pb-6 text-center bg-gradient-to-r from-sky-600 via-blue-600 to-emerald-600 text-white">
-              <div className="mx-auto h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-white/20 ring-2 ring-white/30 grid place-items-center">
+              {/* ==== LOGO WRAPPER DENGAN BORDER PUTIH ==== */}
+              <div className="mx-auto h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-white/20 grid place-items-center border-2 border-white shadow-lg">
                 {/* Logo image (public/img/logo-kmi.png). Fallback to "AP" if image fails. */}
                 {!logoError ? (
                   <img
@@ -64,6 +64,7 @@ export default function Login() {
                   <span className="text-xl font-extrabold">AP</span>
                 )}
               </div>
+
               <h1 className="mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight">
                 Attendance Payroll
               </h1>
@@ -99,6 +100,8 @@ export default function Login() {
                       type="email"
                       autoComplete="username"
                       inputMode="email"
+                      autoFocus
+                      aria-invalid={!!errors.email}
                       className={`${baseInput} ${errors.email ? errorInput : normalInput} pl-10`}
                       placeholder="admin@attenpay.co.id"
                       value={data.email}
@@ -120,6 +123,7 @@ export default function Login() {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="current-password"
+                      aria-invalid={!!errors.password}
                       className={`${baseInput} ${errors.password ? errorInput : normalInput} pl-10 pr-11`}
                       placeholder="••••••••"
                       value={data.password}
@@ -178,36 +182,6 @@ export default function Login() {
                   </button>
                 </div>
               </form>
-
-              {/* Centered seeded user box */}
-              {/* <div className="mt-6 text-center">
-                <div className="inline-flex flex-wrap items-center justify-center gap-2 rounded-lg bg-white/70 border border-white/60 px-3 py-2 text-xs sm:text-[13px] text-slate-700">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-sky-600" aria-hidden>
-                    <path d="M12 5v6l4 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.4"/>
-                  </svg>
-                  <span className="whitespace-nowrap">Seeded user:</span>
-                  <code className="bg-slate-100/70 rounded px-1 py-0.5">admin@attenpay.co.id</code>
-                  <span>/</span>
-                  <code className="bg-slate-100/70 rounded px-1 py-0.5">attenpay</code>
-                  <button
-                    onClick={() => copy('admin@attenpay.co.id')}
-                    className="ml-1 rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100"
-                    title="Copy email"
-                    aria-label="Copy seeded email"
-                  >
-                    ⧉
-                  </button>
-                  <button
-                    onClick={() => copy('attenpay')}
-                    className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100"
-                    title="Copy password"
-                    aria-label="Copy seeded password"
-                  >
-                    ⧉
-                  </button>
-                </div>
-              </div> */}
             </div>
           </div>
 
