@@ -128,7 +128,34 @@ export default function Index({ rows, filters, organizations = [], employees = [
     }
   }
 
-  // ======= MODAL PAYSLIP (Select2-like, modal lebih lebar) =======
+  // ======= NEW: SweetAlert confirmation before LOGOUT (English) =======
+  const confirmLogout = async (e) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
+    try {
+      const Swal = (await import('sweetalert2')).default
+      const res = await Swal.fire({
+        title: 'Logout',
+        text: 'Are you sure you want to log out?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, log out',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#dc2626',
+        focusCancel: true,
+        reverseButtons: true,
+        width: 440,
+      })
+      if (res.isConfirmed) {
+        router.post('/logout')
+      }
+    } catch {
+      if (window.confirm('Are you sure you want to log out?')) {
+        router.post('/logout')
+      }
+    }
+  }
+
+  // ======= MODAL PAYSLIP (Select2-like, wider modal) =======
   const askPayslipExport = async () => {
     const now = new Date()
     const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
@@ -154,7 +181,7 @@ export default function Index({ rows, filters, organizations = [], employees = [
                 <label style="font-size:12px;color:#334155;display:block;margin-bottom:6px">Employee name (optional)</label>
                 <div class="swal2-input" style="margin:0;padding:.6rem;height:auto;box-sizing:border-box">
                   <div style="display:flex; gap:8px; align-items:center">
-                    <input id="slip-emp-search" placeholder="Ketik nama… (Enter = Export)" style="flex:1;border:1px solid #cbd5e1;border-radius:.375rem;padding:.5rem .6rem;font-size:14px" />
+                    <input id="slip-emp-search" placeholder="Type name… (Enter = Export)" style="flex:1;border:1px solid #cbd5e1;border-radius:.375rem;padding:.5rem .6rem;font-size:14px" />
                     <button id="slip-emp-clear" type="button" style="border:1px solid #cbd5e1;border-radius:.375rem;padding:.45rem .7rem;background:#fff">Clear</button>
                   </div>
                   <select id="slip-employee" size="9" style="margin-top:.6rem;width:100%;border:1px solid #cbd5e1;border-radius:.375rem;padding:.3rem .4rem;background:#fff;max-height:18rem;overflow:auto">
@@ -173,7 +200,7 @@ export default function Index({ rows, filters, organizations = [], employees = [
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#6366f1',
         focusConfirm: false,
-        width: 820, // <<< modal dilebarkan
+        width: 820,
         didOpen: () => {
           const search = document.getElementById('slip-emp-search')
           const select = document.getElementById('slip-employee')
@@ -204,7 +231,7 @@ export default function Index({ rows, filters, organizations = [], employees = [
           const fillFromSelected = () => {
             const opt = select.options[select.selectedIndex]
             if (!opt) return
-            search.value = opt.value                // masuk ke field form
+            search.value = opt.value
             pickedText.textContent = opt.value
             pickedWrap.style.display = 'block'
             document.querySelector('.swal2-confirm')?.focus()
@@ -231,7 +258,7 @@ export default function Index({ rows, filters, organizations = [], employees = [
           const m = document.getElementById('slip-month')?.value
           const search = document.getElementById('slip-emp-search')
           if (!m) { Swal.showValidationMessage('Month is required'); return false }
-          return { m, n: (search?.value || '').trim() } // nama kosong = semua employee
+          return { m, n: (search?.value || '').trim() } // empty name = all employees
         }
       })
       if (!formValues) return
@@ -312,7 +339,16 @@ export default function Index({ rows, filters, organizations = [], employees = [
               <button onClick={() => confirmExport('pdf')}  className="px-3 py-2 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">PDF</button>
               <button onClick={askPayslipExport}            className="px-3 py-2 text-sm bg-white/15 hover:bg-white/25 border-l border-white/30">Payslip PDF</button>
             </div>
-            <Link href="/logout" method="post" as="button" aria-label="Logout" className="px-3 py-2 rounded-xl border border-white/40 bg-white/10 hover:bg-white/20 flex items-center gap-2" title="Logout">
+            {/* Logout (Desktop) with SweetAlert confirmation */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              onClick={confirmLogout}
+              aria-label="Logout"
+              className="px-3 py-2 rounded-xl border border-white/40 bg-white/10 hover:bg-white/20 flex items-center gap-2"
+              title="Logout"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5 text-red-300">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9l3 3m0 0l-3 3m3-3H3" />
@@ -334,7 +370,16 @@ export default function Index({ rows, filters, organizations = [], employees = [
                 </div>
               )}
             </div>
-            <Link href="/logout" method="post" as="button" aria-label="Logout" className="px-3 py-1.5 rounded-md border border-white/40 bg-white/10 hover:bg-white/20 flex items-center gap-1.5" title="Logout">
+            {/* Logout (Mobile) with SweetAlert confirmation */}
+            <Link
+              href="/logout"
+              method="post"
+              as="button"
+              onClick={confirmLogout}
+              aria-label="Logout"
+              className="px-3 py-1.5 rounded-md border border-white/40 bg-white/10 hover:bg-white/20 flex items-center gap-1.5"
+              title="Logout"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5 text-red-300">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9l3 3m0 0l-3 3m3-3H3" />
@@ -345,9 +390,10 @@ export default function Index({ rows, filters, organizations = [], employees = [
         </div>
       </header>
 
+      {/* Period badge directly UNDER the blue header, matching your screenshot */}
       <div className="bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white/90 backdrop-blur px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60" aria-label="Selected period">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-300 bg-white px-3 py-0.5 text-[10px] sm:text-[11px] text-sky-700 shadow ring-1 ring-sky-100/60">
             <span className="font-medium">Period:</span>
             <span className="font-semibold">{from}</span>
             <span>→</span>
@@ -471,8 +517,8 @@ export default function Index({ rows, filters, organizations = [], employees = [
                           <td className="px-3 py-2 whitespace-nowrap text-center">{fmtTime(r.clock_out)}</td>
                           <td className="px-3 py-2 whitespace-nowrap text-center"><span className="inline-block w-full text-center">{toName || '-'}</span></td>
                           <td className="px-3 py-2 whitespace-nowrap text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 && present ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
-                              {present ? safeNum(r.real_work_hour) : 0} h
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${safeNum(r.real_work_hour) >= 7 && isPresent(r) ? 'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>
+                              {isPresent(r) ? safeNum(r.real_work_hour) : 0} h
                             </span>
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap text-center"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">{otHours(r)} h</span></td>
