@@ -66,7 +66,7 @@ export default function Login() {
               </div>
 
               <h1 className="mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight">
-                Attendance Payroll
+                Attendance Payroll System
               </h1>
               <p className="text-sm/6 opacity-95">Sign in to continue</p>
             </div>
