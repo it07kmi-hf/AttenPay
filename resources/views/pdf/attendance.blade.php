@@ -73,7 +73,11 @@
 <body>
 @php
   // ===== Helper & Fallback =====
-  $FALLBACK_RATE = 28153;
+  $safeNum = function ($v, $def = 0) {
+      if ($v === null || $v === '') return $def;
+      if (!is_numeric($v)) return $def;
+      return (float)$v;
+  };
 
   // Bersihkan branch_name: ambil bagian sebelum " – ...", " — ...", atau "- ..."
   $cleanBranchName = function ($name) {
@@ -87,11 +91,6 @@
   $firstRow   = (isset($rows) && count($rows)) ? (is_array($rows) ? $rows[0] : $rows->first()) : null;
   $brandTitle = $cleanBranchName($firstRow->branch_name ?? 'PT Kayu Mebel Indonesia (KMI)');
 
-  $safeNum = function ($v, $def = 0) {
-      $n = is_null($v) ? $def : (float)$v;
-      return is_finite($n) ? $n : $def;
-  };
-
   // === Deteksi hadir: harus ada jam kerja > 0 + clock in & out terisi ===
   $isPresent = function ($row) use ($safeNum) {
       $cin   = trim((string)($row->clock_in  ?? ''));
@@ -100,7 +99,7 @@
       return ($cin !== '' && $cout !== '' && $hours > 0);
   };
 
-  // Rate/jam dipakai HANYA jika hadir (kalau tidak → 0; tidak pakai fallback)
+  // Rate/jam dipakai HANYA jika hadir (kalau tidak → 0)
   $hourlyRate = function ($row) use ($safeNum, $isPresent) {
       if (!$isPresent($row)) return 0;
       return (int) max(0, $safeNum($row->hourly_rate_used, 0));
@@ -128,9 +127,7 @@
       return (int) round($billableHours($row) * $hourlyRate($row));
   };
 
-  // Total harian:
-  // - Jika daily_total_amount numeric → gunakan apa adanya (legacy-safe)
-  // - Jika NULL → hadir: base + OT; tidak hadir: 0
+  // Total harian (legacy-safe)
   $dailyFinal = function ($row) use ($basicSalary, $otTotal, $isPresent) {
       if (!is_null($row->daily_total_amount) && is_numeric($row->daily_total_amount)) {
           return (int)$row->daily_total_amount;
@@ -142,7 +139,8 @@
   $fmtDate   = fn($d) => $d ? substr((string)$d, 0, 10) : '-';
   $fmtTime   = fn($t) => $t && strlen($t) >= 5 ? substr((string)$t, 0, 5) : ($t ?: '-');
 
-  $logoPathFs = public_path('img/logo-kmi.png');
+  // Logo: pakai dari $company kalau dikirim, kalau tidak fallback
+  $logoPathFs = isset($company['logo_path']) ? $company['logo_path'] : public_path('img/logo-kmi.png');
   $logoExists = file_exists($logoPathFs);
 
   $sumWork = $sumBase = $sumOTHours = $sumOT1 = $sumOT2 = $sumOTTotal = $sumTotal = 0;
@@ -159,7 +157,7 @@
         @endif
       </td>
       <td class="center">
-        <h1>Attendance Payroll — {{ $brandTitle }}</h1>
+        <h1>Attendance Payroll System  — {{ $brandTitle }}</h1>
         <div class="subtitle">Employee Attendance &amp; Overtime Recap</div>
         <div class="meta">
           Period: <b>{{ $from }}</b> → <b>{{ $to }}</b>
@@ -254,7 +252,7 @@
 <script type="text/php">
 if (isset($pdf)) {
   // A4 landscape; sesuaikan posisi jika perlu
-  $pdf->page_text(520, 810, "Page {PAGE_NUM}/{PAGE_COUNT}", null, 8, [0.4,0.4,0.4]);
+  $pdf->page_text(520, 560, "Page {PAGE_NUM}/{PAGE_COUNT}", null, 8, [0.4,0.4,0.4]);
 }
 </script>
 </body>
